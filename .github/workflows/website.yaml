@@ -1,12 +1,15 @@
+name: Publish Website
+
 on:
   push:
     paths:
       - "website/**"
+      - ".github/workflows/website.yaml"
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    name: Publish to Website
+    name: Publish Website
     environment: 
         name: website
         url: https://itko.dev
