@@ -1,0 +1,33 @@
+on:
+  push:
+    paths:
+      - "website/**"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    name: Publish to Website
+    environment: 
+        name: website
+        url: https://itko.dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # Run a build step here if your project requires
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: d6c9148e8a093f540df75bdca1016654
+          projectName: itko
+          directory: .
+          # Optional: Switch what branch you are publishing to.
+          # By default this will be the branch which triggered this workflow
+          branch: main
+          # Optional: Change the working directory
+          workingDirectory: website
+          # Optional: Change the Wrangler version, allows you to point to a specific version or a tag such as `beta`
+          wranglerVersion: "3"
