@@ -23,7 +23,7 @@ import (
 // Extensions is the CTExtensions field of SignedCertificateTimestamp and
 // TimestampedEntry, according to c2sp.org/sunlight.
 type Extensions struct {
-	LeafIndex int64
+	LeafIndex uint64
 }
 
 func MarshalExtensions(e Extensions) ([]byte, error) {
@@ -81,11 +81,11 @@ func addUint40(b *cryptobyte.Builder, v uint64) {
 
 // readUint40 decodes a big-endian, 40-bit value into out and advances over it.
 // It reports whether the read was successful.
-func readUint40(s *cryptobyte.String, out *int64) bool {
+func readUint40(s *cryptobyte.String, out *uint64) bool {
 	var v []byte
 	if !s.ReadBytes(&v, 5) {
 		return false
 	}
-	*out = int64(v[0])<<32 | int64(v[1])<<24 | int64(v[2])<<16 | int64(v[3])<<8 | int64(v[4])
+	*out = uint64(v[0])<<32 | uint64(v[1])<<24 | uint64(v[2])<<16 | uint64(v[3])<<8 | uint64(v[4])
 	return true
 }

@@ -11,16 +11,19 @@ import (
 )
 
 type GlobalConfig struct {
-	Name      string `json:"name"`
-	KeyPath   string `json:"keyPath"`
-	KeySha256 string `json:"keySha256"`
-	RootPath  string `json:"rootPath"`
-	S3Bucket  string `json:"s3Bucket"`
+	Name          string `json:"name"`
+	KeyPath       string `json:"keyPath"`
+	KeySha256     string `json:"keySha256"`
+	RootPath      string `json:"rootPath"`
+	S3Bucket      string `json:"s3Bucket"`
+	ListenAddress string `json:"listenAddress"`
 }
 
 type Log struct {
 	config GlobalConfig
 	eStop  *consul.Lock
+
+	startingSequence uint64
 }
 
 func NewLog(kvpath string) (*Log, error) {
@@ -50,9 +53,12 @@ func NewLog(kvpath string) (*Log, error) {
 		}
 
 		// If the lock is lost, log a fatal message and fail fast
+		// This will happen in two cases, either we perform cleanup and unlock the lock
+		// or the lock is lost due to reasons out of our control.
+		// Either way, without the lock, we are not allowed to do any more tasks.
 		go func(eStopChan <-chan struct{}) {
 			<-eStopChan
-			log.Fatal("Consul lock lost")
+			log.Fatal("Consul lock lost, exiting now!")
 		}(eStopChan)
 
 		// If the program recieves a Ctrl-C, release the lock

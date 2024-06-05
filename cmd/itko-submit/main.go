@@ -34,7 +34,7 @@ func main() {
 	}
 
 	// Start the log
-	log.Fatal(ctloghandle.Start())
+	log.Fatal(ctloghandle.Start(context.Background()))
 }
 
 func configureOtel() func() {

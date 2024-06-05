@@ -49,12 +49,12 @@ type LogEntry struct {
 	// excluding the first element, with the original order maintained.
 	ChainFp [][32]byte
 
-	// LeafIndex is the zero-based index of the leaf in the log.
-	// It must be between 0 and 2^40-1.
-	LeafIndex int64
-
 	// Timestamp is the TimestampedEntry.timestamp.
 	Timestamp int64
+
+	// LeafIndex is the zero-based index of the leaf in the log.
+	// It must be between 0 and 2^40-1.
+	LeafIndex uint64
 }
 
 // MerkleTreeLeaf returns a RFC 6962 MerkleTreeLeaf.
@@ -181,7 +181,7 @@ func AppendTileLeaf(t []byte, e *LogEntry) []byte {
 	return b.BytesOrPanic()
 }
 
-func addExtensions(b *cryptobyte.Builder, leafIndex int64) {
+func addExtensions(b *cryptobyte.Builder, leafIndex uint64) {
 	b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 		ext, err := MarshalExtensions(Extensions{LeafIndex: leafIndex})
 		if err != nil {
