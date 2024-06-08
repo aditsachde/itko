@@ -44,7 +44,7 @@ func MarshalExtensions(e Extensions) ([]byte, error) {
 	b := &cryptobyte.Builder{}
 	b.AddUint8(0 /* extension_type = leaf_index */)
 	b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
-		if e.LeafIndex < 0 || e.LeafIndex >= 1<<40 {
+		if e.LeafIndex >= 1<<40 {
 			b.SetError(errors.New("leaf_index out of range"))
 			return
 		}

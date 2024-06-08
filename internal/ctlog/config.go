@@ -1,12 +1,15 @@
 package ctlog
 
 import (
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
+	"github.com/google/certificate-transparency-go/x509util"
 	consul "github.com/hashicorp/consul/api"
 )
 
@@ -24,6 +27,28 @@ type Log struct {
 	eStop  *consul.Lock
 
 	startingSequence uint64
+
+	stageZeroData
+}
+
+type stageZeroData struct {
+	roots         *x509util.PEMCertPool
+	stageOneTx    chan<- UnsequencedEntryWithReturnPath
+	notAfterStart time.Time
+	notAfterLimit time.Time
+	logID         [32]byte
+
+	signingKey *ecdsa.PrivateKey
+}
+
+type stageTwoData struct {
+	bucket Bucket
+
+	tree_size        int64
+	timestamp        uint64
+	sha256_root_hash [32]byte
+
+	signingKey *ecdsa.PrivateKey
 }
 
 func NewLog(kvpath string) (*Log, error) {

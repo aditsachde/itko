@@ -24,14 +24,11 @@ import (
 const TileHeight = 8
 const TileWidth = 1 << TileHeight
 
-type LogEntry struct {
-	// Certificate is either the TimestampedEntry.signed_entry, or the
+type UnsequencedEntry struct {
+	// Certificate is either the X509ChainEntry.leaf_certificate, or the
 	// PreCert.tbs_certificate for Precertificates.
 	// It must be at most 2^24-1 bytes long.
 	Certificate []byte
-
-	// CertificateFp is the fingerprint of the first element of the chain
-	CertificateFp [32]byte
 
 	// IsPrecert is true if LogEntryType is precert_entry. Otherwise, the
 	// following three fields are zero and ignored.
@@ -43,6 +40,35 @@ type LogEntry struct {
 	// PreCertificate is the PrecertChainEntry.pre_certificate.
 	// It must be at most 2^24-1 bytes long.
 	PreCertificate []byte
+
+	// CertificateFp is the fingerprint of the first element of the chain
+	CertificateFp [32]byte
+
+	// ChainFp is a slice of the fingerprints of the entries
+	// in the chain submitted the add-chain or add-pre-chain endpoints,
+	// excluding the first element, with the original order maintained.
+	ChainFp [][32]byte
+}
+
+type LogEntry struct {
+	// Certificate is either the X509ChainEntry.leaf_certificate, or the
+	// PreCert.tbs_certificate for Precertificates.
+	// It must be at most 2^24-1 bytes long.
+	Certificate []byte
+
+	// IsPrecert is true if LogEntryType is precert_entry. Otherwise, the
+	// following three fields are zero and ignored.
+	IsPrecert bool
+
+	// IssuerKeyHash is the PreCert.issuer_key_hash.
+	IssuerKeyHash [32]byte
+
+	// PreCertificate is the PrecertChainEntry.pre_certificate.
+	// It must be at most 2^24-1 bytes long.
+	PreCertificate []byte
+
+	// CertificateFp is the fingerprint of the first element of the chain
+	CertificateFp [32]byte
 
 	// ChainFp is a slice of the fingerprints of the entries
 	// in the chain submitted the add-chain or add-pre-chain endpoints,
@@ -58,10 +84,19 @@ type LogEntry struct {
 }
 
 // MerkleTreeLeaf returns a RFC 6962 MerkleTreeLeaf.
+// MerkleTreeLeaf also returns a RFC 6962 digitally-signed struct
+// As it is identical to the MerkleTreeLeaf and the spec has not changed since 2013 :)
 func (e *LogEntry) MerkleTreeLeaf() []byte {
 	b := &cryptobyte.Builder{}
+
+	// for RFC 6962 MerkleTreeLeaf: version = v1
+	// for RFC 6962 digitally-signed struct: sct_version = v1
 	b.AddUint8(0 /* version = v1 */)
-	b.AddUint8(0 /* leaf_type = timestamped_entry */)
+
+	// for RFC 6962 MerkleTreeLeaf: leaf_type = timestamped_entry (0)
+	// for RFC 6962 digitally-signed struct: signature_type = certificate_timestamp (0)
+	b.AddUint8(0)
+
 	b.AddUint64(uint64(e.Timestamp))
 	if !e.IsPrecert {
 		b.AddUint16(0 /* entry_type = x509_entry */)
