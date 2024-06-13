@@ -9,7 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
-	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -18,16 +18,16 @@ type Bucket struct {
 	bucket string
 }
 
-func NewBucket(ctx context.Context, region, bucket, endpoint string) (*Bucket, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return nil, err
+func NewBucket(ctx context.Context, region, bucket, endpoint, username, password string) (*Bucket, error) {
+
+	s3Config := aws.Config{
+		Credentials:  credentials.NewStaticCredentialsProvider(username, password, ""),
+		BaseEndpoint: aws.String(endpoint),
+		Region:       region,
 	}
-	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.Region = region
-		if endpoint != "" {
-			o.BaseEndpoint = aws.String(endpoint)
-		}
+
+	client := s3.NewFromConfig(s3Config, func(o *s3.Options) {
+		o.UsePathStyle = true
 	})
 
 	return &Bucket{

@@ -18,8 +18,13 @@ type GlobalConfig struct {
 	KeyPath       string `json:"keyPath"`
 	KeySha256     string `json:"keySha256"`
 	RootPath      string `json:"rootPath"`
-	S3Bucket      string `json:"s3Bucket"`
 	ListenAddress string `json:"listenAddress"`
+
+	S3Bucket                   string `json:"s3Bucket"`
+	S3Region                   string `json:"s3Region"`
+	S3EndpointUrl              string `json:"s3EndpointUrl"`
+	S3StaticCredentialUserName string `json:"s3StaticCredentialUserName"`
+	S3StaticCredentialPassword string `json:"s3StaticCredentialPassword"`
 }
 
 type Log struct {
@@ -51,7 +56,7 @@ type stageTwoData struct {
 	signingKey *ecdsa.PrivateKey
 }
 
-func NewLog(kvpath string) (*Log, error) {
+func NewLog(kvpath, consulAddress string) (*Log, error) {
 	var lock *consul.Lock
 	var config GlobalConfig
 
@@ -60,7 +65,9 @@ func NewLog(kvpath string) (*Log, error) {
 		configpath := kvpath + "/config"
 
 		// Start by creating a new Consul client
-		client, err := consul.NewClient(consul.DefaultConfig())
+		config := consul.DefaultConfig()
+		config.Address = consulAddress
+		client, err := consul.NewClient(config)
 		if err != nil {
 			return nil, err
 		}

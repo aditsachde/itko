@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace"
 
-	"itko.dev/internal/ctlog"
+	"itko.dev/internal/submitmain"
 )
 
 func main() {
@@ -23,18 +23,7 @@ func main() {
 	kvpath := flag.String("kv-path", "", "Consul KV path")
 	flag.Parse()
 
-	if kvpath == nil || *kvpath == "" {
-		log.Fatal("Must provide a Consul KV path")
-	}
-
-	// Create a new log object
-	ctloghandle, err := ctlog.NewLog(*kvpath)
-	if err != nil {
-		log.Fatalf("Failed to create log object: %v", err)
-	}
-
-	// Start the log
-	log.Fatal(ctloghandle.Start(context.Background()))
+	submitmain.MainMain(*kvpath, "127.0.0.1:8500", nil)
 }
 
 func configureOtel() func() {
