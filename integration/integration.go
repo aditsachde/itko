@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -13,11 +14,11 @@ import (
 	tcConsul "github.com/testcontainers/testcontainers-go/modules/consul"
 	"github.com/testcontainers/testcontainers-go/modules/minio"
 
-	"itko.dev/internal/ctlog"
-	"itko.dev/internal/submitmain"
+	"itko.dev/internal/ctmonitor"
+	"itko.dev/internal/ctsubmit"
 )
 
-func setup(startSignal chan<- struct{}) {
+func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig) {
 	ctx := context.Background()
 
 	// Testcontainers is nice, but consul and minio run nativily on macos.
@@ -34,7 +35,7 @@ func setup(startSignal chan<- struct{}) {
 	// Upload config to Consul
 	logName := "testlog"
 
-	config := ctlog.GlobalConfig{
+	config := ctsubmit.GlobalConfig{
 		Name:          logName,
 		KeyPath:       "",
 		KeySha256:     "",
@@ -53,7 +54,21 @@ func setup(startSignal chan<- struct{}) {
 		log.Fatalf("failed to upload config: %s", err)
 	}
 
-	submitmain.MainMain(logName, consulEndpoint, startSignal)
+	configChan <- config
+
+	submitListener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		log.Fatalf("failed to create listener: %s", err)
+	}
+
+	monitorListener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		log.Fatalf("failed to create listener: %s", err)
+	}
+
+	go ctsubmit.MainMain(submitListener, logName, consulEndpoint, startSignal)
+	go ctmonitor.MainMain(monitorListener, logName, consulEndpoint, startSignal)
+	go proxy(config.ListenAddress, submitListener.Addr().String(), monitorListener.Addr().String())
 }
 
 func consulSetup(ctx context.Context) (string, func()) {
@@ -77,7 +92,7 @@ func consulSetup(ctx context.Context) (string, func()) {
 	}
 }
 
-func uploadConfig(consulAddress, consulKey string, globalConfig ctlog.GlobalConfig) error {
+func uploadConfig(consulAddress, consulKey string, globalConfig ctsubmit.GlobalConfig) error {
 	// Upload config to Consul
 	globalConfigBytes, err := json.Marshal(globalConfig)
 	if err != nil {

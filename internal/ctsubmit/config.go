@@ -1,4 +1,4 @@
-package ctlog
+package ctsubmit
 
 import (
 	"crypto/ecdsa"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/certificate-transparency-go/x509util"
 	consul "github.com/hashicorp/consul/api"
+	"itko.dev/internal/bucket"
 )
 
 type GlobalConfig struct {
@@ -47,7 +48,7 @@ type stageZeroData struct {
 }
 
 type stageTwoData struct {
-	bucket Bucket
+	bucket bucket.Bucket
 
 	tree_size        int64
 	timestamp        uint64

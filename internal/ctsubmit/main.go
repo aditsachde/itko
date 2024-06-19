@@ -1,21 +1,21 @@
-package submitmain
+package ctsubmit
 
 import (
 	"context"
 	"log"
-
-	"itko.dev/internal/ctlog"
+	"net"
+	"net/http"
 )
 
 // This is seperated so we can run this in the integration test.
 // Tests don't need to export Otel to Honeycomb.
-func MainMain(kvpath, consulAddress string, startSignal chan<- struct{}) {
+func MainMain(listener net.Listener, kvpath, consulAddress string, startSignal chan<- struct{}) {
 	if kvpath == "" {
 		log.Fatal("Must provide a Consul KV path")
 	}
 
 	// Create a new log object
-	ctloghandle, err := ctlog.NewLog(kvpath, consulAddress)
+	ctloghandle, err := NewLog(kvpath, consulAddress)
 	if err != nil {
 		log.Fatalf("Failed to create log object: %v", err)
 	}
@@ -24,6 +24,11 @@ func MainMain(kvpath, consulAddress string, startSignal chan<- struct{}) {
 		startSignal <- struct{}{}
 	}
 
+	mux, err := ctloghandle.Start(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to get log handler: %v", err)
+	}
+
 	// Start the log
-	log.Fatal(ctloghandle.Start(context.Background()))
+	log.Fatal(http.Serve(listener, mux))
 }

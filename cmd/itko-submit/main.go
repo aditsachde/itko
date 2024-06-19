@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -11,7 +12,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace"
 
-	"itko.dev/internal/submitmain"
+	"itko.dev/internal/ctsubmit"
 )
 
 func main() {
@@ -23,7 +24,12 @@ func main() {
 	kvpath := flag.String("kv-path", "", "Consul KV path")
 	flag.Parse()
 
-	submitmain.MainMain(*kvpath, "127.0.0.1:8500", nil)
+	listener, err := net.Listen("tcp", "localhost:8080")
+	if err != nil {
+		log.Fatalf("failed to bind to address: %v", err)
+	}
+
+	ctsubmit.MainMain(listener, *kvpath, "localhost:8500", nil)
 }
 
 func configureOtel() func() {

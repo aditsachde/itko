@@ -23,7 +23,6 @@ func (p UnsequencedEntry) Sequence(leafIndex uint64, timestamp int64) LogEntry {
 
 // SignTreeHead takes in the parameters to create a signed tree head and returns the JSON-encoded response.
 func SignTreeHead(k *ecdsa.PrivateKey, treeSize, timestamp uint64, sha256RootHash [32]byte) ([]byte, error) {
-	// ct.GetSTHResponse
 
 	sthBytes, err := ct.SerializeSTHSignatureInput(ct.SignedTreeHead{
 		Version:        ct.V1,

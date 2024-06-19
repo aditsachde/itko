@@ -1,4 +1,4 @@
-package ctlog
+package bucket
 
 import (
 	"bytes"
