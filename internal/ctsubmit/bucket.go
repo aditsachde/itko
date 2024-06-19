@@ -1,4 +1,4 @@
-package bucket
+package ctsubmit
 
 import (
 	"bytes"

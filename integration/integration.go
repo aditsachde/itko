@@ -67,8 +67,8 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 	}
 
 	go ctsubmit.MainMain(submitListener, logName, consulEndpoint, startSignal)
-	go ctmonitor.MainMain(monitorListener, logName, consulEndpoint, startSignal)
-	go proxy(config.ListenAddress, submitListener.Addr().String(), monitorListener.Addr().String())
+	go ctmonitor.MainMain(monitorListener, minioEndpoint, startSignal)
+	proxy(config.ListenAddress, monitorListener.Addr().String(), submitListener.Addr().String())
 }
 
 func consulSetup(ctx context.Context) (string, func()) {

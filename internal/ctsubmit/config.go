@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/certificate-transparency-go/x509util"
 	consul "github.com/hashicorp/consul/api"
-	"itko.dev/internal/bucket"
 )
 
 type GlobalConfig struct {
@@ -48,7 +47,7 @@ type stageZeroData struct {
 }
 
 type stageTwoData struct {
-	bucket bucket.Bucket
+	bucket Bucket
 
 	tree_size        int64
 	timestamp        uint64
@@ -126,7 +125,7 @@ func NewLog(kvpath, consulAddress string) (*Log, error) {
 	}
 
 	// Log the configuration
-	log.Printf("Loaded configuration: %+v", config)
+	log.Printf("✅ Loaded configuration: %+v", config)
 
 	// Now, we can continue by actually setting up the log
 

@@ -41,12 +41,16 @@ func TestPath(t *testing.T) {
 func TestLiveCTIntegration(t *testing.T) {
 	startSignal := make(chan struct{})
 	configChan := make(chan ctsubmit.GlobalConfig)
+
 	go setup(startSignal, configChan)
 	c := <-configChan
 	var config configpb.LogConfig
 
-	<-startSignal
-	log.Println("Starting integration test")
+	<-startSignal // Once for monitor
+	<-startSignal // Once for submit
+	log.Println()
+	log.Println()
+	log.Println("🔔 Starting integration test")
 
 	// This function takes the following arguments
 	// cfg *configpb.LogConfig,
@@ -66,6 +70,6 @@ func TestLiveCTIntegration(t *testing.T) {
 	//     This is set to nil to disable the metrics check because we don't have a metrics server
 	err := integration.RunCTIntegrationForLog(&config, c.ListenAddress, c.ListenAddress, "", time.Second, nil)
 	if err != nil {
-		log.Fatalln("Integration test failed:", err)
+		log.Fatalln("🛑 Integration test failed:", err)
 	}
 }

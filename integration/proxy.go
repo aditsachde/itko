@@ -8,16 +8,16 @@ import (
 
 func proxy(listenaddr, monitoraddr, submitaddr string) {
 	monitorPaths := map[string]struct{}{
-		"/ct/v1/get-sth": {},
+		"/ct/v1/get-sth":             {},
 		"/ct/v1/get-sth-consistency": {},
-		"/ct/v1/get-proof-by-hash": {},
-		"/ct/v1/get-entries": {},
-		"/ct/v1/get-roots": {},
+		"/ct/v1/get-proof-by-hash":   {},
+		"/ct/v1/get-entries":         {},
+		"/ct/v1/get-roots":           {},
 		"/ct/v1/get-entry-and-proof": {},
 	}
 
 	submitPaths := map[string]struct{}{
-		"/ct/v1/add-chain": {},
+		"/ct/v1/add-chain":     {},
 		"/ct/v1/add-pre-chain": {},
 	}
 

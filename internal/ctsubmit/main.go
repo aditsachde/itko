@@ -20,13 +20,13 @@ func MainMain(listener net.Listener, kvpath, consulAddress string, startSignal c
 		log.Fatalf("Failed to create log object: %v", err)
 	}
 
-	if startSignal != nil {
-		startSignal <- struct{}{}
-	}
-
 	mux, err := ctloghandle.Start(context.Background())
 	if err != nil {
 		log.Fatalf("Failed to get log handler: %v", err)
+	}
+
+	if startSignal != nil {
+		startSignal <- struct{}{}
 	}
 
 	// Start the log

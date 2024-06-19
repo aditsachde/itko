@@ -21,9 +21,6 @@ import (
 
 // TODO: Evaluate if the context is actually needed
 func (l *Log) Start(ctx context.Context) (http.Handler, error) {
-	// Start the log
-	log.Printf("Starting log with config: %+v", l.config)
-
 	// Create the channels for the stages
 	stageOneRx := make(chan UnsequencedEntryWithReturnPath)
 	stageTwoTx := make(chan []LogEntryWithReturnPath)
