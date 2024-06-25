@@ -25,3 +25,4 @@ go.work
 /itko-monitor
 
 .env
+.DS_Store

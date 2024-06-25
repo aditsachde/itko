@@ -18,7 +18,7 @@ type Bucket struct {
 	bucket string
 }
 
-func NewBucket(ctx context.Context, region, bucket, endpoint, username, password string) (*Bucket, error) {
+func NewBucket(ctx context.Context, region, bucket, endpoint, username, password string) *Bucket {
 
 	s3Config := aws.Config{
 		Credentials:  credentials.NewStaticCredentialsProvider(username, password, ""),
@@ -33,7 +33,7 @@ func NewBucket(ctx context.Context, region, bucket, endpoint, username, password
 	return &Bucket{
 		client: client,
 		bucket: bucket,
-	}, nil
+	}
 }
 
 func (b *Bucket) Get(ctx context.Context, key string) ([]byte, error) {

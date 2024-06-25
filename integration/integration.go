@@ -2,19 +2,19 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	consul "github.com/hashicorp/consul/api"
 	"github.com/testcontainers/testcontainers-go"
 	tcConsul "github.com/testcontainers/testcontainers-go/modules/consul"
 	"github.com/testcontainers/testcontainers-go/modules/minio"
 
 	"itko.dev/internal/ctmonitor"
+	"itko.dev/internal/ctsetup"
 	"itko.dev/internal/ctsubmit"
 )
 
@@ -49,10 +49,7 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 		S3StaticCredentialPassword: minioPassword,
 	}
 
-	err := uploadConfig(consulEndpoint, logName, config)
-	if err != nil {
-		log.Fatalf("failed to upload config: %s", err)
-	}
+	ctsetup.MainMain(ctx, consulEndpoint, logName, "/Users/adit/Developer/certificate-transparency-go/trillian/testdata/fake-ca.cert", config)
 
 	configChan <- config
 
@@ -66,8 +63,10 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 		log.Fatalf("failed to create listener: %s", err)
 	}
 
+	ctmonitortileurl := minioEndpoint + "/" + minioBucket + "/"
+
 	go ctsubmit.MainMain(submitListener, logName, consulEndpoint, startSignal)
-	go ctmonitor.MainMain(monitorListener, minioEndpoint, startSignal)
+	go ctmonitor.MainMain(monitorListener, ctmonitortileurl, startSignal)
 	proxy(config.ListenAddress, monitorListener.Addr().String(), submitListener.Addr().String())
 }
 
@@ -92,31 +91,17 @@ func consulSetup(ctx context.Context) (string, func()) {
 	}
 }
 
-func uploadConfig(consulAddress, consulKey string, globalConfig ctsubmit.GlobalConfig) error {
-	// Upload config to Consul
-	globalConfigBytes, err := json.Marshal(globalConfig)
-	if err != nil {
-		return err
-	}
-
-	config := consul.DefaultConfig()
-	config.Address = consulAddress
-	client, err := consul.NewClient(config)
-	if err != nil {
-		return err
-	}
-	kv := client.KV()
-	_, err = kv.Put(&consul.KVPair{
-		Key:   consulKey + "/config",
-		Value: globalConfigBytes,
-	}, nil)
-
-	return err
-}
-
 func minioSetup(ctx context.Context) (string, string, string, string, string, func()) {
 	// Minio is used as the S3 provider for integration testing
-	minioContainer, err := minio.RunContainer(ctx, testcontainers.WithImage("minio/minio:RELEASE.2024-01-16T16-07-38Z"))
+	minioContainer, err := minio.RunContainer(ctx,
+		testcontainers.WithImage("minio/minio:RELEASE.2024-01-16T16-07-38Z"),
+		testcontainers.CustomizeRequest(testcontainers.GenericContainerRequest{
+			ContainerRequest: testcontainers.ContainerRequest{
+				Cmd:          []string{"--console-address", ":9001"},
+				ExposedPorts: []string{"9001/tcp"},
+			},
+		}),
+	)
 	if err != nil {
 		log.Fatalf("failed to start container: %s", err)
 	}
@@ -145,6 +130,25 @@ func minioSetup(ctx context.Context) (string, string, string, string, string, fu
 	if err != nil {
 		log.Fatalf("failed to create bucket: %s", err)
 	}
+
+	// Allow public read access to the bucket for testing
+	policyTemplate := `{
+		  "Version":"2012-10-17",
+		  "Statement":[
+		    {
+		      "Sid":"PublicRead",
+		      "Effect":"Allow",
+		      "Principal": "*",
+		      "Action":["s3:GetObject"],
+		      "Resource":["arn:aws:s3:::%s/*"]
+		    }
+		  ]
+		}`
+
+	client.PutBucketPolicy(ctx, &s3.PutBucketPolicyInput{
+		Bucket: aws.String(bucketName),
+		Policy: aws.String(fmt.Sprintf(policyTemplate, bucketName)),
+	})
 
 	return minioEndpoint, minioContainer.Username, minioContainer.Password, bucketName, bucketRegion, func() {
 		if err := minioContainer.Terminate(ctx); err != nil {

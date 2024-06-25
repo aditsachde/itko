@@ -12,14 +12,16 @@ import (
 )
 
 // TODO: Evaluate if the context is actually needed
-func Start(ctx context.Context, tileStore string) (http.Handler, error) {
+func Start(ctx context.Context, tileStoreUrl string) (http.Handler, error) {
+	f := newFetch(tileStoreUrl)
+
 	// Wrap the HTTP handler function with OTel instrumentation
-	wGetSth := otelhttp.NewHandler(http.HandlerFunc(wrapper(get_sth)), "get-sth")
-	wGetSthConsistency := otelhttp.NewHandler(http.HandlerFunc(wrapper(get_sth_consistency)), "get-sth-consistency")
-	wGetProofByHash := otelhttp.NewHandler(http.HandlerFunc(wrapper(get_proof_by_hash)), "get-proof-by-hash")
-	wGetEntries := otelhttp.NewHandler(http.HandlerFunc(wrapper(get_entries)), "get-entries")
-	wGetRoots := otelhttp.NewHandler(http.HandlerFunc(wrapper(get_roots)), "get-roots")
-	wGetEntryAndProof := otelhttp.NewHandler(http.HandlerFunc(wrapper(get_entry_and_proof)), "get-entry-and-proof")
+	wGetSth := otelhttp.NewHandler(http.HandlerFunc(wrapper(f.get_sth)), "get-sth")
+	wGetSthConsistency := otelhttp.NewHandler(http.HandlerFunc(wrapper(f.get_sth_consistency)), "get-sth-consistency")
+	wGetProofByHash := otelhttp.NewHandler(http.HandlerFunc(wrapper(f.get_proof_by_hash)), "get-proof-by-hash")
+	wGetEntries := otelhttp.NewHandler(http.HandlerFunc(wrapper(f.get_entries)), "get-entries")
+	wGetRoots := otelhttp.NewHandler(http.HandlerFunc(wrapper(f.get_roots)), "get-roots")
+	wGetEntryAndProof := otelhttp.NewHandler(http.HandlerFunc(wrapper(f.get_entry_and_proof)), "get-entry-and-proof")
 
 	// Create a new HTTP server mux and start listening
 	mux := http.NewServeMux()
@@ -54,26 +56,34 @@ func wrapper(wrapped func(ctx context.Context, reqBody io.ReadCloser) (resp []by
 	}
 }
 
-func get_sth(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
+func (f Fetch) get_sth(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
+	resp, err = f.get(ctx, "ct/v1/get-sth")
+	if err != nil {
+		return nil, 503, err
+	}
+	return resp, 200, nil
+}
+
+func (f Fetch) get_sth_consistency(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
 	return nil, 403, nil
 }
 
-func get_sth_consistency(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
+func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
 	return nil, 403, nil
 }
 
-func get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
+func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
 	return nil, 403, nil
 }
 
-func get_entries(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
-	return nil, 403, nil
+func (f Fetch) get_roots(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
+	resp, err = f.get(ctx, "ct/v1/get-roots")
+	if err != nil {
+		return nil, 503, err
+	}
+	return resp, 200, nil
 }
 
-func get_roots(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
-	return nil, 403, nil
-}
-
-func get_entry_and_proof(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
+func (f Fetch) get_entry_and_proof(ctx context.Context, reqBody io.ReadCloser) (resp []byte, code int, err error) {
 	return nil, 403, nil
 }
