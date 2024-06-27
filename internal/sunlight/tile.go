@@ -118,14 +118,10 @@ func (e *LogEntry) MerkleTreeLeaf() []byte {
 //     TimestampedEntry timestamped_entry;
 //     select(entry_type) {
 //         case x509_entry: Empty;
-//         case precert_entry: PreCertExtraData;
+//         case precert_entry: ASN.1Cert pre_certificate;
 //     } extra_data;
-//     Fingerprint chain<0..2^8-1>;
+//     Fingerprint chain<0..2^16-1>;
 // } TileLeaf;
-//
-// struct {
-//     ASN.1Cert pre_certificate;
-// } PreCertExtraData;
 //
 // opaque Fingerprint[32];
 
@@ -160,13 +156,13 @@ func ReadTileLeaf(tile []byte) (e *LogEntry, rest []byte, err error) {
 	}
 
 	// look at first byte to determine the length of the chain
-	var fingerprintCount uint8
-	if !s.ReadUint8(&fingerprintCount) {
+	var fingerprintCount uint16
+	if !s.ReadUint16(&fingerprintCount) {
 		return nil, s, fmt.Errorf("invalid data tile precert_entry")
 	}
 	// then, try to read out that many fingerprints
 	e.ChainFp = make([][32]byte, 0, fingerprintCount)
-	for i := uint8(0); i < fingerprintCount; i++ {
+	for i := uint16(0); i < fingerprintCount; i++ {
 		var fingerprint [32]byte
 		if !s.CopyBytes(fingerprint[:]) {
 			return nil, s, fmt.Errorf("invalid data tile precert_entry")
@@ -207,8 +203,7 @@ func AppendTileLeaf(t []byte, e *LogEntry) []byte {
 			b.AddBytes(e.PreCertificate)
 		})
 	}
-	// TODO: add chain
-	b.AddUint8(uint8(len(e.ChainFp)))
+	b.AddUint16(uint16(len(e.ChainFp)))
 	for _, fingerprint := range e.ChainFp {
 		b.AddBytes(fingerprint[:])
 	}
