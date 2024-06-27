@@ -29,7 +29,8 @@ func main() {
 		log.Fatalf("failed to bind to address: %v", err)
 	}
 
-	ctsubmit.MainMain(listener, *kvpath, "localhost:8500", nil)
+	ctx := context.Background()
+	ctsubmit.MainMain(ctx, listener, *kvpath, "localhost:8500", nil)
 }
 
 func configureOtel() func() {

@@ -21,14 +21,10 @@ import (
 
 // TODO: Evaluate if the context is actually needed
 func (l *Log) Start(ctx context.Context) (http.Handler, error) {
-	// Create the channels for the stages
-	stageOneRx := make(chan UnsequencedEntryWithReturnPath)
-	stageTwoTx := make(chan []LogEntryWithReturnPath)
-
 	// Start the stages
 	// TODO: somehow bail if these return an error
-	go stageOne(ctx, stageOneRx, stageTwoTx, l.startingSequence)
-	go stageTwo(ctx, stageTwoTx)
+	go l.stageOneData.stageOne(ctx)
+	go l.stageTwoData.stageTwo(ctx)
 
 	// Wrap the HTTP handler function with OTel instrumentation
 	addChain := otelhttp.NewHandler(http.HandlerFunc(l.stageZeroData.addChain), "add-chain")
@@ -42,16 +38,6 @@ func (l *Log) Start(ctx context.Context) (http.Handler, error) {
 	return http.MaxBytesHandler(mux, 128*1024), nil
 }
 
-type UnsequencedEntryWithReturnPath struct {
-	entry      sunlight.UnsequencedEntry
-	returnPath chan<- sunlight.LogEntry
-}
-
-type LogEntryWithReturnPath struct {
-	entry      sunlight.LogEntry
-	returnPath chan<- sunlight.LogEntry
-}
-
 func (d *stageZeroData) addChain(w http.ResponseWriter, r *http.Request) {
 	d.stageZeroWrapper(w, r, false)
 }
@@ -63,6 +49,7 @@ func (d *stageZeroData) addPreChain(w http.ResponseWriter, r *http.Request) {
 func (d *stageZeroData) stageZeroWrapper(w http.ResponseWriter, r *http.Request, precertEndpoint bool) {
 	resp, code, err := d.stageZero(r.Context(), r.Body, precertEndpoint)
 	if err != nil {
+		log.Println(err)
 		if code == http.StatusServiceUnavailable {
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", 30+rand.Intn(60)))
 			http.Error(w, "pool full", code)
@@ -149,11 +136,6 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 
 	// TODO: upload intermediates
 
-	// TODO: This will cause problems if the channel is full and an unbuffered channel here
-	// isn't really the right thing to have either.
-	// It seems that go doesn't have a simple way to send to a buffered channel but
-	// return an error if the channel is full instead of blocking.
-
 	// Send the unsequenced entry to the first stage
 	returnPath := make(chan sunlight.LogEntry)
 	d.stageOneTx <- UnsequencedEntryWithReturnPath{entry, returnPath}
@@ -187,17 +169,14 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 	return response, http.StatusOK, nil
 }
 
-func stageOne(
+func (d *stageOneData) stageOne(
 	ctx context.Context,
-	stageOneRx <-chan UnsequencedEntryWithReturnPath,
-	stageTwoTx chan<- []LogEntryWithReturnPath,
-	startingSequence uint64,
 ) error {
 	const MAX_POOL_SIZE = 255
 	const FLUSH_INTERVAL = time.Second
 
 	// This variable will be incremented for each log entry
-	sequence := startingSequence
+	sequence := d.startingSequence
 	// Create a vector to store the pool
 	pool := make([]LogEntryWithReturnPath, 0, MAX_POOL_SIZE)
 	// Create a time variable to track the last flush
@@ -208,7 +187,7 @@ func stageOne(
 		select {
 
 		// Wait for the next log entry
-		case entry, ok := <-stageOneRx:
+		case entry, ok := <-d.stageOneRx:
 			if !ok {
 				return fmt.Errorf("stage one: stageOneRx channel closed")
 			}
@@ -231,7 +210,7 @@ func stageOne(
 
 				// Clear the original pool
 				pool = pool[:0]
-				stageTwoTx <- closedPool
+				d.stageTwoTx <- closedPool
 
 				// Update the last flush time
 				lastFlushTime = time.Now()
@@ -246,7 +225,7 @@ func stageOne(
 
 				// Clear the original pool
 				pool = pool[:0]
-				stageTwoTx <- closedPool
+				d.stageTwoTx <- closedPool
 			}
 			// Update the last flush time
 			lastFlushTime = time.Now()
@@ -257,19 +236,30 @@ func stageOne(
 	}
 }
 
-func stageTwo(
+func (d *stageTwoData) stageTwo(
 	ctx context.Context,
-	stageTwoRx <-chan []LogEntryWithReturnPath,
 ) error {
 	// Loop over the channel and context
 	for {
 		select {
-		case pool, ok := <-stageTwoRx:
+		case pool, ok := <-d.stageTwoRx:
 			if !ok {
 				return fmt.Errorf("stage two: stageTwoRx channel closed")
 			}
 
 			// TODO: Process the pool
+
+			// LeafIndex is zero-indexed, so the tree size is the last leaf index + 1
+			treeSize := pool[len(pool)-1].entry.LeafIndex + 1
+
+			jsonBytes, err := sunlight.SignTreeHead(d.signingKey, treeSize, uint64(time.Now().UnixMilli()), sha256.Sum256([]byte("")))
+			if err != nil {
+				return fmt.Errorf("failed to generate a new STH: %w", err)
+			}
+
+			d.bucket.Set(ctx, "/ct/v1/get-sth", jsonBytes)
+
+			// Everything is uploaded, return the log entries
 			for _, entry := range pool {
 				entry.returnPath <- entry.entry
 			}

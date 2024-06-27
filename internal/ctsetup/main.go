@@ -2,16 +2,22 @@ package ctsetup
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"log"
+	"os"
+	"time"
 
 	"github.com/google/certificate-transparency-go/x509util"
 	consul "github.com/hashicorp/consul/api"
 
 	"itko.dev/internal/ctsubmit"
+	"itko.dev/internal/sunlight"
 )
 
-func MainMain(ctx context.Context, consulAddress, consulKey string, rootCerts string, gc ctsubmit.GlobalConfig) {
+func MainMain(ctx context.Context, consulAddress, consulKey, rootCerts, signingKey string, gc ctsubmit.GlobalConfig) {
 	err := uploadRoots(ctx, rootCerts, gc)
 	if err != nil {
 		log.Fatalf("Failed to upload root certificates to S3: %v", err)
@@ -22,6 +28,10 @@ func MainMain(ctx context.Context, consulAddress, consulKey string, rootCerts st
 		log.Fatalf("Failed to upload config to Consul: %v", err)
 	}
 
+	err = uploadEmptySth(ctx, signingKey, gc)
+	if err != nil {
+		log.Fatalf("Failed to upload empty STH to S3: %v", err)
+	}
 }
 
 func uploadConfig(consulAddress, consulKey string, globalConfig ctsubmit.GlobalConfig) error {
@@ -68,7 +78,33 @@ func uploadRoots(ctx context.Context, rootCerts string, gc ctsubmit.GlobalConfig
 		return err
 	}
 
-	bucket := ctsubmit.NewBucket(ctx, gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+	bucket := ctsubmit.NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
 	return bucket.Set(ctx, "/ct/v1/get-roots", rootBytes)
 
+}
+
+func uploadEmptySth(ctx context.Context, signingKey string, gc ctsubmit.GlobalConfig) error {
+	keyPEM, err := os.ReadFile(signingKey)
+	if err != nil {
+		return err
+	}
+	keyBlock, _ := pem.Decode(keyPEM)
+
+	// keyDecrypted, err := x509.DecryptPEMBlock(keyBlock, []byte("dirk"))
+	// if err != nil {
+	// 	return err
+	// }
+
+	key, err := x509.ParseECPrivateKey(keyBlock.Bytes)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, err := sunlight.SignTreeHead(key, 0, uint64(time.Now().UnixMilli()), sha256.Sum256([]byte("")))
+	if err != nil {
+		return err
+	}
+
+	bucket := ctsubmit.NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+	return bucket.Set(ctx, "/ct/v1/get-sth", jsonBytes)
 }

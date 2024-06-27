@@ -23,6 +23,7 @@ go.work
 # Built binaries
 /itko-submit
 /itko-monitor
+/itko-setup
 
 .env
 .DS_Store

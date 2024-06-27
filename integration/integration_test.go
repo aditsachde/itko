@@ -68,7 +68,7 @@ func TestLiveCTIntegration(t *testing.T) {
 	//     We set it to 1 sec, as Itko has no MMD
 	// stats *integration.logStats
 	//     This is set to nil to disable the metrics check because we don't have a metrics server
-	err := integration.RunCTIntegrationForLog(&config, c.ListenAddress, c.ListenAddress, "", time.Second, nil)
+	err := integration.RunCTIntegrationForLog(&config, c.ListenAddress, c.ListenAddress, "./testdata", time.Second, nil)
 	if err != nil {
 		log.Fatalln("🛑 Integration test failed:", err)
 	}

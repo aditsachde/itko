@@ -37,8 +37,8 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 
 	config := ctsubmit.GlobalConfig{
 		Name:          logName,
-		KeyPath:       "",
-		KeySha256:     "",
+		KeyPath:       "./testdata/ct-http-server.privkey.plaintext.pem",
+		LogID:         "lrviNpCI/wLGL5VTfK25b8cOdbP0YA7tGoQak5jST9o=",
 		RootPath:      "",
 		ListenAddress: "localhost:3030",
 
@@ -47,9 +47,12 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 		S3EndpointUrl:              minioEndpoint,
 		S3StaticCredentialUserName: minioUsername,
 		S3StaticCredentialPassword: minioPassword,
+
+		NotAfterStart: "2020-01-01T00:00:00Z",
+		NotAfterLimit: "2030-01-01T00:00:00Z",
 	}
 
-	ctsetup.MainMain(ctx, consulEndpoint, logName, "/Users/adit/Developer/certificate-transparency-go/trillian/testdata/fake-ca.cert", config)
+	ctsetup.MainMain(ctx, consulEndpoint, logName, "./testdata/fake-ca.cert", "./testdata/ct-http-server.privkey.plaintext.pem", config)
 
 	configChan <- config
 
@@ -65,7 +68,7 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 
 	ctmonitortileurl := minioEndpoint + "/" + minioBucket + "/"
 
-	go ctsubmit.MainMain(submitListener, logName, consulEndpoint, startSignal)
+	go ctsubmit.MainMain(ctx, submitListener, logName, consulEndpoint, startSignal)
 	go ctmonitor.MainMain(monitorListener, ctmonitortileurl, startSignal)
 	proxy(config.ListenAddress, monitorListener.Addr().String(), submitListener.Addr().String())
 }

@@ -1,22 +1,28 @@
 package ctsubmit
 
 import (
+	"context"
 	"crypto/ecdsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"time"
 
+	"github.com/google/certificate-transparency-go/x509"
 	"github.com/google/certificate-transparency-go/x509util"
 	consul "github.com/hashicorp/consul/api"
+	"itko.dev/internal/sunlight"
 )
 
 type GlobalConfig struct {
 	Name          string `json:"name"`
 	KeyPath       string `json:"keyPath"`
-	KeySha256     string `json:"keySha256"`
+	LogID         string `json:"logID"`
 	RootPath      string `json:"rootPath"`
 	ListenAddress string `json:"listenAddress"`
 
@@ -25,20 +31,34 @@ type GlobalConfig struct {
 	S3EndpointUrl              string `json:"s3EndpointUrl"`
 	S3StaticCredentialUserName string `json:"s3StaticCredentialUserName"`
 	S3StaticCredentialPassword string `json:"s3StaticCredentialPassword"`
+
+	NotAfterStart string `json:"notAfterStart"`
+	NotAfterLimit string `json:"notAfterLimit"`
 }
 
 type Log struct {
 	config GlobalConfig
 	eStop  *consul.Lock
 
-	startingSequence uint64
-
 	stageZeroData
+	stageOneData
+	stageTwoData
+}
+
+type UnsequencedEntryWithReturnPath struct {
+	entry      sunlight.UnsequencedEntry
+	returnPath chan<- sunlight.LogEntry
+}
+
+type LogEntryWithReturnPath struct {
+	entry      sunlight.LogEntry
+	returnPath chan<- sunlight.LogEntry
 }
 
 type stageZeroData struct {
+	stageOneTx chan<- UnsequencedEntryWithReturnPath
+
 	roots         *x509util.PEMCertPool
-	stageOneTx    chan<- UnsequencedEntryWithReturnPath
 	notAfterStart time.Time
 	notAfterLimit time.Time
 	logID         [32]byte
@@ -46,7 +66,16 @@ type stageZeroData struct {
 	signingKey *ecdsa.PrivateKey
 }
 
+type stageOneData struct {
+	stageOneRx <-chan UnsequencedEntryWithReturnPath
+	stageTwoTx chan<- []LogEntryWithReturnPath
+
+	startingSequence uint64
+}
+
 type stageTwoData struct {
+	stageTwoRx <-chan []LogEntryWithReturnPath
+
 	bucket Bucket
 
 	tree_size        int64
@@ -56,9 +85,9 @@ type stageTwoData struct {
 	signingKey *ecdsa.PrivateKey
 }
 
-func NewLog(kvpath, consulAddress string) (*Log, error) {
+func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 	var lock *consul.Lock
-	var config GlobalConfig
+	var gc GlobalConfig
 
 	{
 		lockpath := kvpath + "/lock"
@@ -119,15 +148,128 @@ func NewLog(kvpath, consulAddress string) (*Log, error) {
 		}
 
 		// Unmarshal the configuration into a struct
-		if err := json.Unmarshal(rawConfig.Value, &config); err != nil {
+		if err := json.Unmarshal(rawConfig.Value, &gc); err != nil {
 			return nil, err
 		}
 	}
 
-	// Log the configuration
-	log.Printf("✅ Loaded configuration: %+v", config)
-
 	// Now, we can continue by actually setting up the log
 
-	return &Log{config: config, eStop: lock}, nil
+	// First, check that the private key we have is actually valid, because
+	// we can't do anything without it.
+	var key *ecdsa.PrivateKey
+
+	{
+		keyPEM, err := os.ReadFile(gc.KeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("unable to read key: %v", err)
+		}
+		keyBlock, _ := pem.Decode(keyPEM)
+
+		key, err = x509.ParseECPrivateKey(keyBlock.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse key: %v", err)
+		}
+
+		pkix, err := x509.MarshalPKIXPublicKey(key.Public())
+		if err != nil {
+			return nil, fmt.Errorf("unable to marshal public key: %v", err)
+		}
+		logSha := sha256.Sum256(pkix)
+		logID := base64.StdEncoding.EncodeToString(logSha[:])
+
+		// sanity check to make sure wrong private key is not accidentally used
+		if logID != gc.LogID {
+			return nil, fmt.Errorf("log ID does not match: %s != %s", logID, gc.LogID)
+		}
+	}
+
+	// Create the channels for the stages
+	// TODO: This will cause problems if the channel is full and an unbuffered channel here
+	// isn't really the right thing to have either.
+	// It seems that go doesn't have a simple way to send to a buffered channel but
+	// return an error if the channel is full instead of blocking.
+
+	stageOneCommChan := make(chan UnsequencedEntryWithReturnPath)
+	stageTwoCommChan := make(chan []LogEntryWithReturnPath)
+
+	// Stage zero setup
+	var stageZero stageZeroData
+
+	{
+		notAfterStart, err := time.Parse(time.RFC3339, gc.NotAfterStart)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse NotAfterStart: %v", err)
+		}
+		notAfterLimit, err := time.Parse(time.RFC3339, gc.NotAfterLimit)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse NotAfterLimit: %v", err)
+		}
+
+		bucket := NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+
+		var res struct {
+			Certificates [][]byte `json:"certificates"`
+		}
+		roots, err := bucket.Get(ctx, "/ct/v1/get-roots")
+		if err != nil {
+			return nil, fmt.Errorf("unable to fetch roots: %v", err)
+		}
+		err = json.Unmarshal(roots, &res)
+		if err != nil {
+			return nil, fmt.Errorf("unable to unmarshal roots: %v", err)
+		}
+
+		// iterate over the certificates and add them to the pool
+		r := x509util.NewPEMCertPool()
+		for _, certBytes := range res.Certificates {
+			cert, err := x509.ParseCertificate(certBytes)
+			if err != nil {
+				return nil, fmt.Errorf("unable to parse certificate: %v", err)
+			}
+			r.AddCert(cert)
+		}
+
+		stageZero = stageZeroData{
+			stageOneTx: stageOneCommChan,
+
+			roots:         r,
+			notAfterStart: notAfterStart,
+			notAfterLimit: notAfterLimit,
+
+			signingKey: key,
+		}
+	}
+
+	var stageOne stageOneData
+	{
+		stageOne = stageOneData{
+			stageOneRx: stageOneCommChan,
+			stageTwoTx: stageTwoCommChan,
+
+			startingSequence: 0,
+		}
+	}
+
+	var stageTwo stageTwoData
+	{
+		bucket := NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+
+		stageTwo = stageTwoData{
+			stageTwoRx: stageTwoCommChan,
+
+			bucket: bucket,
+
+			signingKey: key,
+		}
+	}
+
+	return &Log{
+		config: gc,
+		eStop:  lock,
+
+		stageZeroData: stageZero,
+		stageOneData:  stageOne,
+		stageTwoData:  stageTwo,
+	}, nil
 }
