@@ -119,6 +119,7 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 
 	entry.IsPrecert = isPrecert
 	entry.CertificateFp = sha256.Sum256(chain[0].Raw)
+	entry.Chain = chain[1:]
 	for _, cert := range chain[1:] {
 		entry.ChainFp = append(entry.ChainFp, sha256.Sum256(cert.Raw))
 	}
@@ -131,7 +132,7 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 		// Preissuer means that the intermediate that issued the precert is only valid
 		// for issuing precertificates.
 		var preIssuer *x509.Certificate
-		if ct.IsPreIssuer(preIssuer) {
+		if ct.IsPreIssuer(chain[1]) {
 			preIssuer = chain[1]
 		}
 		// This function requires preIssuer to be nil if the issuer is not a preissuer
@@ -207,7 +208,8 @@ func (d *stageOneData) stageOne(
 	ctx context.Context,
 ) error {
 	const MAX_POOL_SIZE = 255
-	const FLUSH_INTERVAL = time.Second
+	// const FLUSH_INTERVAL = time.Second
+	const FLUSH_INTERVAL = time.Millisecond * 100
 
 	// This variable will be incremented for each log entry
 	sequence := d.startingSequence
@@ -237,7 +239,7 @@ func (d *stageOneData) stageOne(
 			pool = append(pool, logEntry)
 
 			// Conditions to flush the pool
-			if len(pool) >= MAX_POOL_SIZE || sequence%256 == 0 || time.Since(lastFlushTime) >= FLUSH_INTERVAL {
+			if len(pool) >= MAX_POOL_SIZE || time.Since(lastFlushTime) >= FLUSH_INTERVAL {
 				// Create a copy of the pool
 				closedPool := make([]LogEntryWithReturnPath, len(pool))
 				copy(closedPool, pool)
@@ -302,6 +304,9 @@ func (d *stageTwoData) stageTwo(
 				leafIndex int64
 			}, 0, len(pool))
 
+			// This is the right most data tile
+			dataTile := d.edgeTiles[-1]
+
 			for _, e := range pool {
 				recordHash := tlog.RecordHash(e.entry.MerkleTreeLeaf())
 				recordHashes = append(recordHashes, struct {
@@ -316,9 +321,34 @@ func (d *stageTwoData) stageTwo(
 					index := tlog.StoredHashIndex(0, int64(e.entry.LeafIndex)) + int64(i)
 					newHashes[index] = hash
 				}
+
+				dataTile.Bytes = sunlight.AppendTileLeaf(dataTile.Bytes, &e.entry)
+				dataTile.Tile.W++
+
+				// This means we have a full width tile that we can go ahead and upload
+				if dataTile.Tile.W == sunlight.TileWidth {
+					err := d.bucket.Set(ctx, dataTile.Path(), dataTile.Bytes)
+					if err != nil {
+						return fmt.Errorf("failed to upload data tile %v: %w", dataTile.Tile, err)
+					}
+
+					// Reset the width to zero
+					dataTile.Tile.W = 0
+					// Increment the tile index
+					dataTile.Tile.N++
+					// Clear the bytes
+					dataTile.Bytes = []byte{}
+				}
 			}
 
-			// TODO: data tiles aren't actually uploaded yet
+			// upload the partial data tile
+			if dataTile.Tile.W > 0 {
+				err := d.bucket.Set(ctx, dataTile.Path(), dataTile.Bytes)
+				if err != nil {
+					return fmt.Errorf("failed to upload partial data tile %v: %w", dataTile.Tile, err)
+				}
+			}
+			d.edgeTiles[-1] = dataTile
 
 			// ** Upload the tree tiles **
 			// TODO: review if the treesize should be a int64 instead, to align with the tlog apis.
@@ -355,6 +385,16 @@ func (d *stageTwoData) stageTwo(
 			}
 
 			// ** Upload new intermediate certificates **
+			// TODO: this won't blow up S3, but we're certainly making far more requests than needed. add a cache.
+			for _, e := range pool {
+				for _, cert := range e.entry.Chain {
+					fingerprint := sha256.Sum256(cert.Raw)
+					err := d.bucket.Set(ctx, fmt.Sprintf("issuer/%x", fingerprint), cert.Raw)
+					if err != nil {
+						return fmt.Errorf("failed to upload issuer certificate %x: %w", fingerprint, err)
+					}
+				}
+			}
 
 			// ** Upload a new STH **
 			rootHash, err := tlog.TreeHash(int64(newTreeSize), hashReader)

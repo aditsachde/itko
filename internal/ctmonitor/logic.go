@@ -14,6 +14,7 @@ import (
 	"strconv"
 
 	ct "github.com/google/certificate-transparency-go"
+	"github.com/google/certificate-transparency-go/tls"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/mod/sumdb/tlog"
 	"itko.dev/internal/sunlight"
@@ -85,6 +86,11 @@ func hashreader(ctx context.Context, f Fetch) tlog.HashReaderFunc {
 	}
 }
 
+type tileWithBytes struct {
+	tlog.Tile
+	Bytes []byte
+}
+
 // TODO: Remove the wrapper from this endpoint and have it instead stream the response
 func (f Fetch) get_sth(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error) {
 	resp, err = f.get(ctx, "ct/v1/get-sth")
@@ -95,7 +101,7 @@ func (f Fetch) get_sth(ctx context.Context, reqBody io.ReadCloser, query url.Val
 }
 
 func (f Fetch) get_sth_consistency(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error) {
-	// Get and decode the hash parameter
+	// Get and decode the first tree size parameter
 	firstStr := query.Get("first")
 	if firstStr == "" {
 		return nil, 400, err
@@ -104,7 +110,7 @@ func (f Fetch) get_sth_consistency(ctx context.Context, reqBody io.ReadCloser, q
 	if err != nil {
 		return nil, 400, err
 	}
-	// Get and decode the hash parameter
+	// Get and decode the second tree size parameter
 	secondStr := query.Get("second")
 	if secondStr == "" {
 		return nil, 400, err
@@ -208,7 +214,158 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 }
 
 func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error) {
-	return nil, 403, nil
+	// Get and decode the start indxe parameter
+	startStr := query.Get("start")
+	if startStr == "" {
+		return nil, 400, err
+	}
+	start, err := strconv.ParseInt(startStr, 10, 64)
+	if err != nil {
+		return nil, 400, err
+	}
+	// Get and decode the end index parameter
+	endStr := query.Get("end")
+	if endStr == "" {
+		return nil, 400, err
+	}
+	end, err := strconv.ParseInt(endStr, 10, 64)
+	if err != nil {
+		return nil, 400, err
+	}
+
+	if start > end {
+		return nil, 400, fmt.Errorf("start must be less than or equal to end")
+	}
+
+	if start < 0 || end < 0 {
+		return nil, 400, fmt.Errorf("start and end must be positive")
+	}
+
+	// Limit the number of entries fetched at once to 1000
+	if end-start > 1000 {
+		end = start + 1000
+	}
+
+	// Get the first and last tiles, -1 signifies a data tile
+	firstTile := tlog.TileForIndex(sunlight.TileHeight, tlog.StoredHashIndex(0, start))
+	firstTile.L = -1
+	lastTile := tlog.TileForIndex(sunlight.TileHeight, tlog.StoredHashIndex(0, end))
+	lastTile.L = -1
+
+	dataTiles := make([]tileWithBytes, 0)
+
+	// In this case, the last tile is the same as the first tile so we only need to fetch one tile
+	if firstTile.N == lastTile.N {
+		data, err := f.get(ctx, lastTile.Path())
+		if err != nil {
+			return nil, 500, err
+		}
+		dataTiles = append(dataTiles, tileWithBytes{lastTile, data})
+	} else {
+		{
+			// If the index of the last tile is greater than the index of the first tile,
+			// it means the first tile is complete
+			firstTile.W = 256
+			data, err := f.get(ctx, firstTile.Path())
+			if err != nil {
+				return nil, 500, err
+			}
+			dataTiles = append(dataTiles, tileWithBytes{firstTile, data})
+		}
+
+		{
+			// We also need to fetch all the tiles in middle. Here, we sort of just
+			// need to define the tile ourselves and fetch it
+			for i := firstTile.N + 1; i < lastTile.N; i++ {
+				tile := tlog.Tile{
+					H: sunlight.TileHeight,
+					L: -1,
+					N: i,
+					W: 256,
+				}
+
+				data, err := f.get(ctx, tile.Path())
+				if err != nil {
+					return nil, 500, err
+				}
+				dataTiles = append(dataTiles, tileWithBytes{tile, data})
+			}
+
+		}
+
+		{
+			// Finally, fetch the last tile
+			data, err := f.get(ctx, lastTile.Path())
+			if err != nil {
+				return nil, 500, err
+			}
+			dataTiles = append(dataTiles, tileWithBytes{lastTile, data})
+		}
+	}
+
+	// Now we need to parse the data tiles into entries
+	var entries []*sunlight.LogEntry
+	for _, tile := range dataTiles {
+		rest := tile.Bytes
+		for len(rest) > 0 {
+			entry, nextRest, err := sunlight.ReadTileLeaf(rest)
+			if err != nil {
+				return nil, 500, err
+			}
+			if entry.LeafIndex >= uint64(start) && entry.LeafIndex <= uint64(end) {
+				entries = append(entries, entry)
+			}
+			rest = nextRest
+		}
+	}
+
+	ctLeafEntries := make([]ct.LeafEntry, 0, len(entries))
+
+	for _, entry := range entries {
+		merkleTreeLeaf := entry.MerkleTreeLeaf()
+
+		// TODO: add a cache here
+		chain := make([]ct.ASN1Cert, 0, len(entry.ChainFp))
+		for _, fp := range entry.ChainFp {
+			data, err := f.get(ctx, fmt.Sprintf("issuer/%x", fp))
+			if err != nil {
+				return nil, 500, err
+			}
+			chain = append(chain, ct.ASN1Cert{Data: data})
+		}
+
+		var extra interface{}
+		if entry.IsPrecert {
+			extra = ct.PrecertChainEntry{
+				PreCertificate:   ct.ASN1Cert{Data: entry.PreCertificate},
+				CertificateChain: chain,
+			}
+		} else {
+			extra = ct.CertificateChain{Entries: chain}
+		}
+
+		extraData, err := tls.Marshal(extra)
+		if err != nil {
+			return nil, 500, err
+		}
+
+		leafEntry := ct.LeafEntry{
+			LeafInput: merkleTreeLeaf,
+			ExtraData: extraData,
+		}
+		ctLeafEntries = append(ctLeafEntries, leafEntry)
+	}
+
+	response := ct.GetEntriesResponse{
+		Entries: ctLeafEntries,
+	}
+
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return nil, 500, err
+	}
+
+	return jsonBytes, 200, nil
 }
 
 // TODO: Remove the wrapper from this endpoint and have it instead stream the response

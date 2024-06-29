@@ -16,6 +16,7 @@ package sunlight
 
 import (
 	"fmt"
+	"github.com/google/certificate-transparency-go/x509"
 	"math"
 
 	"golang.org/x/crypto/cryptobyte"
@@ -48,6 +49,11 @@ type UnsequencedEntry struct {
 	// in the chain submitted the add-chain or add-pre-chain endpoints,
 	// excluding the first element, with the original order maintained.
 	ChainFp [][32]byte
+
+	// Chain is the rest of the certificates in the chain
+	// It will only be filled in if the LogEntry is generated in the
+	// submit cert or precert endpoints
+	Chain []*x509.Certificate
 }
 
 type LogEntry struct {
@@ -74,6 +80,11 @@ type LogEntry struct {
 	// in the chain submitted the add-chain or add-pre-chain endpoints,
 	// excluding the first element, with the original order maintained.
 	ChainFp [][32]byte
+
+	// Chain is the rest of the certificates in the chain
+	// It will only be filled in if the LogEntry is generated in the
+	// submit cert or precert endpoints
+	Chain []*x509.Certificate
 
 	// Timestamp is the TimestampedEntry.timestamp.
 	Timestamp int64
@@ -169,6 +180,7 @@ func ReadTileLeaf(tile []byte) (e *LogEntry, rest []byte, err error) {
 		}
 		e.ChainFp = append(e.ChainFp, fingerprint)
 	}
+	e.CertificateFp = e.ChainFp[0]
 
 	var extensionType uint8
 	var extensionData cryptobyte.String

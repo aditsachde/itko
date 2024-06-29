@@ -15,6 +15,7 @@ func (p UnsequencedEntry) Sequence(leafIndex uint64, timestamp int64) LogEntry {
 		IssuerKeyHash:  p.IssuerKeyHash,
 		PreCertificate: p.PreCertificate,
 		ChainFp:        p.ChainFp,
+		Chain:          p.Chain,
 
 		Timestamp: timestamp,
 		LeafIndex: leafIndex,

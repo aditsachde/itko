@@ -260,6 +260,15 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 		// TODO: actually fetch the edge tiles
 		// For now, just create an empty map
 		edgeTiles := make(map[int]tileWithBytes)
+		edgeTiles[-1] = tileWithBytes{
+			Tile: tlog.Tile{
+				H: sunlight.TileHeight,
+				L: -1,
+				N: 0,
+				W: 0,
+			},
+			Bytes: []byte{},
+		}
 
 		stageTwo = stageTwoData{
 			stageTwoRx: stageTwoCommChan,
