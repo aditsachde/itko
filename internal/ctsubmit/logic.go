@@ -1,9 +1,11 @@
 package ctsubmit
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -264,8 +266,19 @@ func (d *stageTwoData) stageTwo(
 			// newHashes will let the hashReader function look them up.
 			hashReader := d.hashReader(newHashes)
 
+			// these are the hashes of the merkle tree leaves and are needed later
+			recordHashes := make([]struct {
+				hash      tlog.Hash
+				leafIndex int64
+			}, 0, len(pool))
+
 			for _, e := range pool {
-				hashes, err := tlog.StoredHashes(int64(e.entry.LeafIndex), e.entry.MerkleTreeLeaf(), hashReader)
+				recordHash := tlog.RecordHash(e.entry.MerkleTreeLeaf())
+				recordHashes = append(recordHashes, struct {
+					hash      tlog.Hash
+					leafIndex int64
+				}{recordHash, int64(e.entry.LeafIndex)})
+				hashes, err := tlog.StoredHashesForRecordHash(int64(e.entry.LeafIndex), recordHash, hashReader)
 				if err != nil {
 					return fmt.Errorf("failed to calculate new hashes for leaf %d: %w", e.entry.LeafIndex, err)
 				}
@@ -294,9 +307,25 @@ func (d *stageTwoData) stageTwo(
 			}
 			d.edgeTiles = newEdgeTiles
 
-			// ** Upload the v1 leaf hash mappings **
+			// ** Upload the v1 leaf record hash mappings **
+			// TODO: this will literally blow up S3
+			for _, recordHash := range recordHashes {
+				indexBuf := new(bytes.Buffer)
+				err := binary.Write(indexBuf, binary.LittleEndian, recordHash.leafIndex)
+				if err != nil {
+					return fmt.Errorf("failed to encode leaf record hash %d: %w", recordHash.leafIndex, err)
+				}
+
+				hashString := base64.StdEncoding.EncodeToString(recordHash.hash[:])
+
+				err = d.bucket.Set(ctx, fmt.Sprintf("ct/v1/leaf-record-hash/%s", hashString), indexBuf.Bytes())
+				if err != nil {
+					return fmt.Errorf("failed to upload leaf record hash %d: %w", recordHash.leafIndex, err)
+				}
+			}
 
 			// ** Upload the dedupe mappings **
+			// TODO: this should probably be done after the STH is uploaded
 
 			// ** Upload new intermediate certificates **
 

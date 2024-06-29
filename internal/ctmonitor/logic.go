@@ -1,8 +1,9 @@
 package ctmonitor
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -84,6 +85,7 @@ func hashreader(ctx context.Context, f Fetch) tlog.HashReaderFunc {
 	}
 }
 
+// TODO: Remove the wrapper from this endpoint and have it instead stream the response
 func (f Fetch) get_sth(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error) {
 	resp, err = f.get(ctx, "ct/v1/get-sth")
 	if err != nil {
@@ -102,13 +104,9 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 	if hashBase64 == "" {
 		return nil, 400, err
 	}
-	hash, err := base64.StdEncoding.DecodeString(hashBase64)
-	if err != nil {
-		return nil, 400, err
-	}
 
 	// print the hash
-	log.Printf("hash: %x", hash)
+	// log.Printf("hash: %x", hash)
 
 	// Get and parse the tree_size parameter
 	treeSizeStr := query.Get("tree_size")
@@ -121,12 +119,23 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 		return nil, 400, err
 	}
 
-	index := int64(0)
+	// fetch the index using the hash
+	indexBytes, err := f.get(ctx, fmt.Sprintf("ct/v1/leaf-record-hash/%s", hashBase64))
+	if err != nil {
+		return nil, 404, err
+	}
+
+	var index int64
+	err = binary.Read(bytes.NewReader(indexBytes), binary.LittleEndian, &index)
+	if err != nil {
+		return nil, 500, err
+	}
 
 	if index < 0 || index >= treeSize {
 		return nil, 400, fmt.Errorf("index out of range")
 	}
 
+	// Get the proof
 	proof, err := tlog.ProveRecord(treeSize, index, hashreader(ctx, f))
 	if err != nil {
 		return nil, 500, err
@@ -155,6 +164,7 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 	return nil, 403, nil
 }
 
+// TODO: Remove the wrapper from this endpoint and have it instead stream the response
 func (f Fetch) get_roots(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error) {
 	resp, err = f.get(ctx, "ct/v1/get-roots")
 	if err != nil {
