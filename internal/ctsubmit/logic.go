@@ -87,10 +87,6 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 		return nil, http.StatusBadRequest, fmt.Errorf("chain is empty")
 	}
 
-	// print the EKU of the first certificate in the chain
-	certalkf, _ := x509.ParseCertificate(req.Chain[0])
-	log.Printf("EKU of the first certificate in the chain: %v", certalkf.ExtKeyUsage)
-
 	// TODO: What EKU parameters should be accepted by the log?
 	// The trillian integration tests include leaf certificates without any EKU parameters
 

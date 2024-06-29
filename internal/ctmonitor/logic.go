@@ -95,7 +95,57 @@ func (f Fetch) get_sth(ctx context.Context, reqBody io.ReadCloser, query url.Val
 }
 
 func (f Fetch) get_sth_consistency(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error) {
-	return nil, 403, nil
+	// Get and decode the hash parameter
+	firstStr := query.Get("first")
+	if firstStr == "" {
+		return nil, 400, err
+	}
+	first, err := strconv.ParseInt(firstStr, 10, 64)
+	if err != nil {
+		return nil, 400, err
+	}
+	// Get and decode the hash parameter
+	secondStr := query.Get("second")
+	if secondStr == "" {
+		return nil, 400, err
+	}
+	second, err := strconv.ParseInt(secondStr, 10, 64)
+	if err != nil {
+		return nil, 400, err
+	}
+
+	if first > second {
+		return nil, 400, fmt.Errorf("first must be less than or equal to second")
+	}
+
+	// Get the consistency proof
+	var proof tlog.TreeProof
+
+	// If the first tree size is 0, then the prove tree function returns an error.
+	// However, as per the spec, in this case, an empty proof should be returned
+	if first >= 1 {
+		proof, err = tlog.ProveTree(second, first, hashreader(ctx, f))
+		if err != nil {
+			return nil, 500, err
+		}
+	}
+
+	// why you make me do this golang
+	proofBytes := make([][]byte, len(proof))
+	for i, p := range proof {
+		proofBytes[i] = p[:]
+	}
+
+	response := ct.GetSTHConsistencyResponse{
+		Consistency: proofBytes,
+	}
+
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return nil, 500, err
+	}
+
+	return jsonBytes, 200, nil
 }
 
 func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error) {
@@ -104,9 +154,6 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 	if hashBase64 == "" {
 		return nil, 400, err
 	}
-
-	// print the hash
-	// log.Printf("hash: %x", hash)
 
 	// Get and parse the tree_size parameter
 	treeSizeStr := query.Get("tree_size")
