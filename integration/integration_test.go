@@ -7,36 +7,8 @@ import (
 
 	"github.com/google/certificate-transparency-go/trillian/ctfe/configpb"
 	"github.com/google/certificate-transparency-go/trillian/integration"
-	"golang.org/x/tools/go/packages"
 	"itko.dev/internal/ctsubmit"
 )
-
-func TestPath(t *testing.T) {
-	pkgPath := "github.com/google/certificate-transparency-go"
-
-	// Load the package
-	cfg := &packages.Config{
-		Mode: packages.NeedFiles,
-	}
-	pkgs, err := packages.Load(cfg, pkgPath)
-	if err != nil {
-		log.Fatalf("failed to load package: %v", err)
-	}
-
-	// Check if the package was found
-	if len(pkgs) == 0 {
-		log.Fatalf("package not found: %s", pkgPath)
-	}
-
-	// Get the directory of the package
-	pkg := pkgs[0]
-	if len(pkg.GoFiles) == 0 {
-		log.Fatalf("no Go files found in package: %s", pkgPath)
-	}
-
-	// Print the directory
-	log.Println(pkg.OtherFiles)
-}
 
 func TestLiveCTIntegration(t *testing.T) {
 	startSignal := make(chan struct{})

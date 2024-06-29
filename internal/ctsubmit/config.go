@@ -16,6 +16,7 @@ import (
 	"github.com/google/certificate-transparency-go/x509"
 	"github.com/google/certificate-transparency-go/x509util"
 	consul "github.com/hashicorp/consul/api"
+	"golang.org/x/mod/sumdb/tlog"
 	"itko.dev/internal/sunlight"
 )
 
@@ -55,6 +56,11 @@ type LogEntryWithReturnPath struct {
 	returnPath chan<- sunlight.LogEntry
 }
 
+type tileWithBytes struct {
+	tlog.Tile
+	Bytes []byte
+}
+
 type stageZeroData struct {
 	stageOneTx chan<- UnsequencedEntryWithReturnPath
 
@@ -76,11 +82,8 @@ type stageOneData struct {
 type stageTwoData struct {
 	stageTwoRx <-chan []LogEntryWithReturnPath
 
-	bucket Bucket
-
-	tree_size        int64
-	timestamp        uint64
-	sha256_root_hash [32]byte
+	bucket    Bucket
+	edgeTiles map[int]tileWithBytes
 
 	signingKey *ecdsa.PrivateKey
 }
@@ -255,10 +258,15 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 	{
 		bucket := NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
 
+		// TODO: actually fetch the edge tiles
+		// For now, just create an empty map
+		edgeTiles := make(map[int]tileWithBytes)
+
 		stageTwo = stageTwoData{
 			stageTwoRx: stageTwoCommChan,
 
-			bucket: bucket,
+			bucket:    bucket,
+			edgeTiles: edgeTiles,
 
 			signingKey: key,
 		}
