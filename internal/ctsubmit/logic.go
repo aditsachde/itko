@@ -143,7 +143,6 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 
 		entry.Certificate = tbsCertficiate
 		entry.IssuerKeyHash = sha256.Sum256(chain[1].RawSubjectPublicKeyInfo)
-		entry.Certificate = chain[2].Raw
 	}
 
 	// Before we send the unsequenced entry to the first stage, we need to check if it's a duplicate
