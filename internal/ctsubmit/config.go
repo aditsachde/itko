@@ -68,6 +68,7 @@ type stageZeroData struct {
 	notAfterStart time.Time
 	notAfterLimit time.Time
 	logID         [32]byte
+	bucket        Bucket
 
 	signingKey *ecdsa.PrivateKey
 }
@@ -195,6 +196,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 
 	stageOneCommChan := make(chan UnsequencedEntryWithReturnPath)
 	stageTwoCommChan := make(chan []LogEntryWithReturnPath)
+	bucket := NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
 
 	// Stage zero setup
 	var stageZero stageZeroData
@@ -208,8 +210,6 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse NotAfterLimit: %v", err)
 		}
-
-		bucket := NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
 
 		var res struct {
 			Certificates [][]byte `json:"certificates"`
@@ -239,6 +239,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 			roots:         r,
 			notAfterStart: notAfterStart,
 			notAfterLimit: notAfterLimit,
+			bucket:        bucket,
 
 			signingKey: key,
 		}
@@ -256,8 +257,6 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 
 	var stageTwo stageTwoData
 	{
-		bucket := NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
-
 		// TODO: actually fetch the edge tiles
 		// For now, just create an empty map
 		edgeTiles := make(map[int]tileWithBytes)

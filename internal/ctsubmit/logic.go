@@ -138,16 +138,39 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 		entry.Certificate = chain[2].Raw
 	}
 
-	// TODO: upload intermediates
+	// Before we send the unsequenced entry to the first stage, we need to check if it's a duplicate
+	// This is done by hashing the certificate fingerprint and checking if it exists in the dedupe map
+	dedupeKey := base64.StdEncoding.EncodeToString(entry.CertificateFp[:])
+	dedupeVal, err := d.bucket.Get(ctx, fmt.Sprintf("ct/v1/dedupe/%s", dedupeKey))
 
-	// Send the unsequenced entry to the first stage
-	returnPath := make(chan sunlight.LogEntry)
-	d.stageOneTx <- UnsequencedEntryWithReturnPath{entry, returnPath}
+	var completeEntry sunlight.LogEntry
 
-	// TODO: Add a timeout with select
-	// If we recieve something here, that means that the entry has been both sequenced
-	// and uploaded with a newly signed STH, so we can issue a SCT.
-	completeEntry := <-returnPath
+	if err == nil {
+		// If we recieved a valid cache hit, then the certificate is a duplicate
+		buf := bytes.NewReader(dedupeVal)
+		var leafIndex uint64
+		var timestamp int64
+		err := binary.Read(buf, binary.LittleEndian, &leafIndex)
+		if err != nil {
+			return nil, 500, err
+		}
+		err = binary.Read(buf, binary.LittleEndian, &timestamp)
+		if err != nil {
+			return nil, 500, err
+		}
+		completeEntry = entry.Sequence(leafIndex, timestamp)
+	} else {
+		// Otherwise, we need to send it to the sequencer
+
+		// Send the unsequenced entry to the first stage
+		returnPath := make(chan sunlight.LogEntry)
+		d.stageOneTx <- UnsequencedEntryWithReturnPath{entry, returnPath}
+
+		// TODO: Add a timeout with select
+		// If we recieve something here, that means that the entry has been both sequenced
+		// and uploaded with a newly signed STH, so we can issue a SCT.
+		completeEntry = <-returnPath
+	}
 
 	extension, err := sunlight.MarshalExtensions(sunlight.Extensions{LeafIndex: completeEntry.LeafIndex})
 	if err != nil {
@@ -324,9 +347,6 @@ func (d *stageTwoData) stageTwo(
 				}
 			}
 
-			// ** Upload the dedupe mappings **
-			// TODO: this should probably be done after the STH is uploaded
-
 			// ** Upload new intermediate certificates **
 
 			// ** Upload a new STH **
@@ -343,6 +363,31 @@ func (d *stageTwoData) stageTwo(
 			err = d.bucket.Set(ctx, "/ct/v1/get-sth", jsonBytes)
 			if err != nil {
 				return fmt.Errorf("failed to upload new STH: %w", err)
+			}
+
+			// ** Upload the dedupe mappings **
+			// TODO: this will also blow up S3
+			for _, e := range pool {
+				// TODO: This isn't the best cache key, because it fails to distinguish between
+				// a certificate that is submitted with a different chain. This is a problem because
+				// I think the specific chain the certificate was submitted with also matters.
+				dedupeKey := base64.StdEncoding.EncodeToString(e.entry.CertificateFp[:])
+
+				dedupeVal := new(bytes.Buffer)
+				err := binary.Write(dedupeVal, binary.LittleEndian, e.entry.LeafIndex)
+				if err != nil {
+					return fmt.Errorf("failed to encode leaf index %d: %w", e.entry.LeafIndex, err)
+				}
+				err = binary.Write(dedupeVal, binary.LittleEndian, e.entry.Timestamp)
+				if err != nil {
+					return fmt.Errorf("failed to encode timestamp %d: %w", e.entry.Timestamp, err)
+				}
+
+				err = d.bucket.Set(ctx, fmt.Sprintf("ct/v1/dedupe/%s", dedupeKey), dedupeVal.Bytes())
+				if err != nil {
+					// TODO: sunlight doesn't make this a hard failure, should we?
+					return fmt.Errorf("failed to upload dedupe mapping for %s: %w", dedupeKey, err)
+				}
 			}
 
 			// ** Everything is uploaded, return the log entries **
