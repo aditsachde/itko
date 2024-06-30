@@ -194,8 +194,8 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 	// It seems that go doesn't have a simple way to send to a buffered channel but
 	// return an error if the channel is full instead of blocking.
 
-	stageOneCommChan := make(chan UnsequencedEntryWithReturnPath)
-	stageTwoCommChan := make(chan []LogEntryWithReturnPath)
+	stageOneCommChan := make(chan UnsequencedEntryWithReturnPath, 200)
+	stageTwoCommChan := make(chan []LogEntryWithReturnPath, 2)
 	bucket := NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
 
 	// Stage zero setup

@@ -132,9 +132,12 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 		// Preissuer means that the intermediate that issued the precert is only valid
 		// for issuing precertificates.
 		var preIssuer *x509.Certificate
+		issuer := chain[1]
 		if ct.IsPreIssuer(chain[1]) {
 			preIssuer = chain[1]
+			issuer = chain[2]
 		}
+
 		// This function requires preIssuer to be nil if the issuer is not a preissuer
 		tbsCertficiate, err := x509.BuildPrecertTBS(chain[0].RawTBSCertificate, preIssuer)
 		if err != nil {
@@ -142,7 +145,7 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 		}
 
 		entry.Certificate = tbsCertficiate
-		entry.IssuerKeyHash = sha256.Sum256(chain[1].RawSubjectPublicKeyInfo)
+		entry.IssuerKeyHash = sha256.Sum256(issuer.RawSubjectPublicKeyInfo)
 	}
 
 	// Before we send the unsequenced entry to the first stage, we need to check if it's a duplicate
@@ -208,7 +211,7 @@ func (d *stageOneData) stageOne(
 ) error {
 	const MAX_POOL_SIZE = 255
 	// const FLUSH_INTERVAL = time.Second
-	const FLUSH_INTERVAL = time.Millisecond * 100
+	const FLUSH_INTERVAL = time.Millisecond * 50
 
 	// This variable will be incremented for each log entry
 	sequence := d.startingSequence
