@@ -87,8 +87,8 @@ func hashreader(ctx context.Context, f Fetch) tlog.HashReaderFunc {
 }
 
 type tileWithBytes struct {
-	tlog.Tile
-	Bytes []byte
+	tile  tlog.Tile
+	bytes []byte
 }
 
 // TODO: Remove the wrapper from this endpoint and have it instead stream the response
@@ -214,7 +214,7 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 }
 
 func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error) {
-	// Get and decode the start indxe parameter
+	// Get and decode the start index parameter
 	startStr := query.Get("start")
 	if startStr == "" {
 		return nil, 400, err
@@ -306,7 +306,7 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 	// Now we need to parse the data tiles into entries
 	var entries []*sunlight.LogEntry
 	for _, tile := range dataTiles {
-		rest := tile.Bytes
+		rest := tile.bytes
 		for len(rest) > 0 {
 			entry, nextRest, err := sunlight.ReadTileLeaf(rest)
 			if err != nil {
@@ -378,5 +378,107 @@ func (f Fetch) get_roots(ctx context.Context, reqBody io.ReadCloser, query url.V
 }
 
 func (f Fetch) get_entry_and_proof(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error) {
-	return nil, 403, nil
+	// Get and decode the leaf index parameter
+	leafIndexStr := query.Get("leaf_index")
+	if leafIndexStr == "" {
+		return nil, 400, err
+	}
+	leafIndex, err := strconv.ParseInt(leafIndexStr, 10, 64)
+	if err != nil {
+		return nil, 400, err
+	}
+	// Get and decode the tree size parameter
+	treeSizeStr := query.Get("tree_size")
+	if treeSizeStr == "" {
+		return nil, 400, err
+	}
+	treeSize, err := strconv.ParseInt(treeSizeStr, 10, 64)
+	if err != nil {
+		return nil, 400, err
+	}
+
+	if leafIndex < 0 || leafIndex >= treeSize {
+		return nil, 400, fmt.Errorf("index out of range")
+	}
+
+	// Get the entry
+	tile := tlog.TileForIndex(sunlight.TileHeight, tlog.StoredHashIndex(0, leafIndex))
+	tile.L = -1
+
+	// TODO: add a cache
+	data, err := f.get(ctx, tile.Path())
+	if err != nil {
+		return nil, 500, err
+	}
+
+	var leafEntry *sunlight.LogEntry
+
+	rest := data
+	for len(rest) > 0 {
+		entry, nextRest, err := sunlight.ReadTileLeaf(rest)
+		if err != nil {
+			return nil, 500, err
+		}
+		if entry.LeafIndex == uint64(leafIndex) {
+			leafEntry = entry
+			break
+		}
+		rest = nextRest
+	}
+
+	if leafEntry == nil {
+		return nil, 404, fmt.Errorf("entry not found")
+	}
+
+	merkleTreeLeaf := leafEntry.MerkleTreeLeaf()
+
+	// TODO: add a cache here
+	chain := make([]ct.ASN1Cert, 0, len(leafEntry.ChainFp))
+	for _, fp := range leafEntry.ChainFp {
+		data, err := f.get(ctx, fmt.Sprintf("issuer/%x", fp))
+		if err != nil {
+			return nil, 500, err
+		}
+		chain = append(chain, ct.ASN1Cert{Data: data})
+	}
+
+	var extra interface{}
+	if leafEntry.IsPrecert {
+		extra = ct.PrecertChainEntry{
+			PreCertificate:   ct.ASN1Cert{Data: leafEntry.PreCertificate},
+			CertificateChain: chain,
+		}
+	} else {
+		extra = ct.CertificateChain{Entries: chain}
+	}
+
+	extraData, err := tls.Marshal(extra)
+	if err != nil {
+		return nil, 500, err
+	}
+
+	// Get the proof
+	proof, err := tlog.ProveRecord(treeSize, leafIndex, hashreader(ctx, f))
+	if err != nil {
+		return nil, 500, err
+	}
+
+	// why you make me do this golang
+	proofBytes := make([][]byte, len(proof))
+	for i, p := range proof {
+		proofBytes[i] = p[:]
+	}
+
+	response := ct.GetEntryAndProofResponse{
+		LeafInput: merkleTreeLeaf,
+		ExtraData: extraData,
+		AuditPath: proofBytes,
+	}
+
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return nil, 500, err
+	}
+
+	return jsonBytes, 200, nil
 }
