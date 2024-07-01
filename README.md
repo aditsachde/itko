@@ -2,13 +2,17 @@
 
 Ikto is a new CT log that conforms to both the Sunlight and RFC6962 APIs, with a primary goal to be cheaper and easier to operate. RFC6962 monitoring APIs are implemented via a stateless proxy supported by some modifications to the base Sunlight spec.
 
+## Acknowledgements
+
+Itko would not have been possible without the transparency work done at Google, on [CT](https://github.com/google/certificate-transparency-go/) and [tile based logs](https://research.swtch.com/tlog), and Fillipo Valsorda's work on the [Sunlight log](https://sunlight.dev). Itko's implementation is largely based on the code and design decisions from Sunlight, and its testing infrastructure relies on that of certificate-transparency-go.
+
 ## Design Decisions
 
 ### Sunlight Modifications
 
 Itko incorporates the updates to the Sunlight spec made as part of this PR: https://github.com/C2SP/C2SP/pull/76.
 
-Additionally, the Sunlight log serves the Signed Tree Head as a [checkpoint](https://c2sp.org/tlog-checkpoint). However, in order to maintain compatibility with RFC6962, it uses the `TreeHeadSignature` as its signature algorithm, which ends up requiring extra wrangling with the existing `note` package and leaves the origin line of the checkpoint unauthenticated. Rather, a static JSON response matching RFC6962 Section 4.3 is written to `sth`.
+Additionally, the Sunlight log serves the Signed Tree Head as a [checkpoint](https://c2sp.org/tlog-checkpoint). This checkpoint uses the same signature algorithm as in RFC6962 but results in an unauthenticated origin line and requires a bunch of wrangling to convert back into a RFC6962 compliant response. Since Itko needs to implement RFC6962's `get-sth` endpoint, it stores the STH as a static JSON response at `/ct/v1/get-sth` instead of as a checkpoint at `/checkpoint`.
 
 ### RFC6962 Compliance
 
@@ -16,13 +20,13 @@ The largest challenge with adapting Sunlight's tile-based monitoring API to RFC6
 
 This API is inspiried by k-anonymity model used by HaveIBeenPwned for the purposes of improving caching, rather than for privacy. Introducing a database to back this API undesirable, but so is storing a billion tiny files into S3, especially when compatibile alternatives may have minimum object sizes.
 
-`<N>` is the first `n` bits of the hash encoded as hexadecimal. The contents of this file contains an array with elements of the following structure: `Hash: 265-n bits, Index: 40 bits`. This array is sorted by the `hash` to allow for binary searching.
+`<N>` is the first `n` bits of the hash encoded as hexadecimal. The contents of this file contains an array with elements of the following structure: `Hash: 256 bits, Index: 40 bits`. This array is sorted by the `hash` to allow for binary searching.
 
 The value for `n` for the current log is served at `/hashes/mask`. The specific value for `n` can be calculated by taking the estimate for the number of certificates that will be submitted to the current shard and a target size for the individual files, then solving for a bitmask that will allow for the target to be met.
 
-This API intended for use solely by the stateless proxy component, rather than other log monitors, and may change.
+A similar scheme is used for the dedupe cache, at `/dedupe/<N>`. The contents of this file contains an array with elements of the following structure: `Hash: 256 bits, Timestamp: 64 bits, Index: 40 bits`. This array is sorted by the `hash` to allow for binary searching. In this case, hash is the fingerprint of the leaf certificate.
 
-A nonfunctional example of what this could look like can be found at [this commit](https://github.com/FiloSottile/sunlight/commit/13a319871f929568d8ed09f84de7c00f5dfc0df2).
+This API intended for use solely by the stateless proxy component, rather than other log monitors, and may change.
 
 ### Maximum Merge Delay Considerations
 
