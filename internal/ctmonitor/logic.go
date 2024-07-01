@@ -3,6 +3,7 @@ package ctmonitor
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -160,6 +161,10 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 	if hashBase64 == "" {
 		return nil, 400, err
 	}
+	hash, err := base64.StdEncoding.DecodeString(hashBase64)
+	if err != nil {
+		return nil, 400, err
+	}
 
 	// Get and parse the tree_size parameter
 	treeSizeStr := query.Get("tree_size")
@@ -173,7 +178,7 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 	}
 
 	// fetch the index using the hash
-	indexBytes, err := f.get(ctx, fmt.Sprintf("ct/v1/leaf-record-hash/%s", hashBase64))
+	indexBytes, err := f.get(ctx, fmt.Sprintf("ct/v1/leaf-record-hash/%x", hash))
 	if err != nil {
 		return nil, 404, err
 	}
