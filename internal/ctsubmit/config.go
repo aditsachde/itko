@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"time"
 
+	ct "github.com/google/certificate-transparency-go"
 	"github.com/google/certificate-transparency-go/x509"
 	"github.com/google/certificate-transparency-go/x509util"
 	consul "github.com/hashicorp/consul/api"
@@ -24,7 +25,6 @@ type GlobalConfig struct {
 	Name          string `json:"name"`
 	KeyPath       string `json:"keyPath"`
 	LogID         string `json:"logID"`
-	RootPath      string `json:"rootPath"`
 	ListenAddress string `json:"listenAddress"`
 
 	S3Bucket                   string `json:"s3Bucket"`
@@ -198,9 +198,21 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 	stageTwoCommChan := make(chan []LogEntryWithReturnPath, 2)
 	bucket := NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
 
+	// Get the latest STH
+	var sth ct.SignedTreeHead
+	{
+		sthBytes, err := bucket.Get(ctx, "ct/v1/get-sth")
+		if err != nil {
+			return nil, fmt.Errorf("unable to fetch STH: %v", err)
+		}
+		err = json.Unmarshal(sthBytes, &sth)
+		if err != nil {
+			return nil, fmt.Errorf("unable to unmarshal STH: %v", err)
+		}
+	}
+
 	// Stage zero setup
 	var stageZero stageZeroData
-
 	{
 		notAfterStart, err := time.Parse(time.RFC3339, gc.NotAfterStart)
 		if err != nil {
@@ -233,12 +245,25 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 			r.AddCert(cert)
 		}
 
+		logID, err := base64.StdEncoding.DecodeString(gc.LogID)
+		if err != nil {
+			return nil, fmt.Errorf("unable to decode log ID: %v", err)
+		}
+		if len(logID) != 32 {
+			return nil, fmt.Errorf("logID must be exactly 32 bytes long")
+		}
+
+		// Convert []byte to [32]byte
+		var logIDArray [32]byte
+		copy(logIDArray[:], logID)
+
 		stageZero = stageZeroData{
 			stageOneTx: stageOneCommChan,
 
 			roots:         r,
 			notAfterStart: notAfterStart,
 			notAfterLimit: notAfterLimit,
+			logID:         logIDArray,
 			bucket:        bucket,
 
 			signingKey: key,
@@ -251,23 +276,66 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 			stageOneRx: stageOneCommChan,
 			stageTwoTx: stageTwoCommChan,
 
-			startingSequence: 0,
+			// Starting index is zero indexed, so we don't need to add one
+			startingSequence: sth.TreeSize,
 		}
 	}
 
 	var stageTwo stageTwoData
 	{
-		// TODO: actually fetch the edge tiles
-		// For now, just create an empty map
 		edgeTiles := make(map[int]tileWithBytes)
-		edgeTiles[-1] = tileWithBytes{
-			Tile: tlog.Tile{
-				H: sunlight.TileHeight,
-				L: -1,
-				N: 0,
-				W: 0,
-			},
-			Bytes: []byte{},
+
+		if sth.TreeSize == 0 {
+			// If there are no tiles, then initialize an empty data tile
+			edgeTiles[-1] = tileWithBytes{
+				Tile: tlog.Tile{
+					H: sunlight.TileHeight,
+					L: -1,
+					N: 0,
+					W: 0,
+				},
+				Bytes: []byte{},
+			}
+		} else {
+			// Fetch the edge tiles
+			// This technique was taken from Sunlight. The idea is that the TileHashReader has the ability
+			// to fetch, verify, and save the tiles once verified using a custom function. We set this up,
+			// and then use it to fetch the level zero tile of the current tree size. This causes it to
+			// fetch all the parent tiles up until the root hash in order to verify the level zero tile.
+			_, err := tlog.TileHashReader(tlog.Tree{
+				N:    int64(sth.TreeSize),
+				Hash: tlog.Hash(sth.SHA256RootHash),
+			}, &sunlight.TileReader{
+				Fetch: func(key string) ([]byte, error) {
+					return bucket.Get(ctx, key)
+				}, SaveTilesInt: func(tiles []tlog.Tile, data [][]byte) {
+					for i, tile := range tiles {
+						if t, ok := edgeTiles[tile.L]; !ok || t.N < tile.N || (t.N == tile.N && t.W < tile.W) {
+							edgeTiles[tile.L] = tileWithBytes{
+								Tile:  tile,
+								Bytes: data[i],
+							}
+						}
+					}
+				},
+			}).ReadHashes([]int64{tlog.StoredHashIndex(0, int64(sth.TreeSize)-1)})
+			if err != nil {
+				return nil, fmt.Errorf("unable to fetch and verify edge tiles: %v", err)
+			}
+
+			// Verify the data tile
+			dataTile := edgeTiles[0]
+			// the data tile is the same as the level zero tile, with L -1
+			dataTile.Tile.L = -1
+
+			dataTileBytes, err := bucket.Get(ctx, dataTile.Path())
+			if err != nil {
+				return nil, fmt.Errorf("unable to fetch data tile: %v", err)
+			}
+			dataTile.Bytes = dataTileBytes
+			edgeTiles[-1] = dataTile
+
+			// TODO: verify the data tile against the L0 tile
 		}
 
 		stageTwo = stageTwoData{
