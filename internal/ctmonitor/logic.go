@@ -67,15 +67,16 @@ func wrapper(wrapped func(ctx context.Context, reqBody io.ReadCloser, query url.
 	}
 }
 
-func hashreader(ctx context.Context, f Fetch) tlog.HashReaderFunc {
+func hashreader(ctx context.Context, f Fetch, fallbackTreeSize int64) tlog.HashReaderFunc {
+	finalTile := tlog.TileForIndex(sunlight.TileHeight, fallbackTreeSize)
 	// TODO: add some sort of cache here, this function is bound to be called a few times for the same tiles
 	return func(indexes []int64) ([]tlog.Hash, error) {
 		hashes := make([]tlog.Hash, 0, len(indexes))
 		for _, index := range indexes {
 			tile := tlog.TileForIndex(sunlight.TileHeight, index)
-			data, err := f.get(ctx, tile.Path())
+			data, err := f.getTileAAAA(ctx, tile, finalTile)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to fetch tile %s: %w (fallback %s)", tile.Path(), err, finalTile.Path())
 			}
 			hash, err := tlog.HashFromTile(tile, data, index)
 			if err != nil {
@@ -125,15 +126,33 @@ func (f Fetch) get_sth_consistency(ctx context.Context, reqBody io.ReadCloser, q
 		return nil, 400, fmt.Errorf("first must be less than or equal to second")
 	}
 
+	// TODO: but what if we didn't need this?
+	sthBytes, err := f.get(ctx, "ct/v1/get-sth")
+	if err != nil {
+		// TODO: Fix all the response status codes
+		return nil, 521, err
+	}
+	var sth ct.SignedTreeHead
+	err = json.Unmarshal(sthBytes, &sth)
+	if err != nil {
+		return nil, 522, err
+	}
+
+	if first > int64(sth.TreeSize) || second > int64(sth.TreeSize) {
+		return nil, 400, fmt.Errorf("tree size out of range")
+	}
+
 	// Get the consistency proof
 	var proof tlog.TreeProof
 
 	// If the first tree size is 0, then the prove tree function returns an error.
 	// However, as per the spec, in this case, an empty proof should be returned
+	// TODO: this fails if the size of the first tree is greater than the actual number of records in the tree
 	if first >= 1 {
-		proof, err = tlog.ProveTree(second, first, hashreader(ctx, f))
+		proof, err = tlog.ProveTree(second, first, hashreader(ctx, f, second))
 		if err != nil {
-			return nil, 500, err
+			log.Println(err)
+			return nil, 523, err
 		}
 	}
 
@@ -149,7 +168,7 @@ func (f Fetch) get_sth_consistency(ctx context.Context, reqBody io.ReadCloser, q
 
 	jsonBytes, err := json.Marshal(response)
 	if err != nil {
-		return nil, 500, err
+		return nil, 524, err
 	}
 
 	return jsonBytes, 200, nil
@@ -178,7 +197,7 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 	}
 
 	// fetch the index using the hash
-	indexBytes, err := f.get(ctx, fmt.Sprintf("ct/v1/leaf-record-hash/%x", hash))
+	indexBytes, err := f.get(ctx, fmt.Sprintf("ct/unstable/leaf-record-hash/%x", hash))
 	if err != nil {
 		return nil, 404, err
 	}
@@ -186,7 +205,7 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 	var index int64
 	err = binary.Read(bytes.NewReader(indexBytes), binary.LittleEndian, &index)
 	if err != nil {
-		return nil, 500, err
+		return nil, 510, err
 	}
 
 	if index < 0 || index >= treeSize {
@@ -194,9 +213,10 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 	}
 
 	// Get the proof
-	proof, err := tlog.ProveRecord(treeSize, index, hashreader(ctx, f))
+	proof, err := tlog.ProveRecord(treeSize, index, hashreader(ctx, f, treeSize))
 	if err != nil {
-		return nil, 500, err
+		log.Println(err)
+		return nil, 511, err
 	}
 
 	// why you make me do this golang
@@ -212,7 +232,7 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 
 	jsonBytes, err := json.Marshal(response)
 	if err != nil {
-		return nil, 500, err
+		return nil, 512, err
 	}
 
 	return jsonBytes, 200, nil
@@ -261,9 +281,9 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 
 	// In this case, the last tile is the same as the first tile so we only need to fetch one tile
 	if firstTile.N == lastTile.N {
-		data, err := f.get(ctx, lastTile.Path())
+		data, err := f.getTile(ctx, lastTile)
 		if err != nil {
-			return nil, 500, err
+			return nil, 513, err
 		}
 		dataTiles = append(dataTiles, tileWithBytes{lastTile, data})
 	} else {
@@ -271,9 +291,9 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 			// If the index of the last tile is greater than the index of the first tile,
 			// it means the first tile is complete
 			firstTile.W = 256
-			data, err := f.get(ctx, firstTile.Path())
+			data, err := f.getTile(ctx, firstTile)
 			if err != nil {
-				return nil, 500, err
+				return nil, 514, err
 			}
 			dataTiles = append(dataTiles, tileWithBytes{firstTile, data})
 		}
@@ -289,9 +309,9 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 					W: 256,
 				}
 
-				data, err := f.get(ctx, tile.Path())
+				data, err := f.getTile(ctx, tile)
 				if err != nil {
-					return nil, 500, err
+					return nil, 515, err
 				}
 				dataTiles = append(dataTiles, tileWithBytes{tile, data})
 			}
@@ -300,9 +320,9 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 
 		{
 			// Finally, fetch the last tile
-			data, err := f.get(ctx, lastTile.Path())
+			data, err := f.getTile(ctx, lastTile)
 			if err != nil {
-				return nil, 500, err
+				return nil, 516, err
 			}
 			dataTiles = append(dataTiles, tileWithBytes{lastTile, data})
 		}
@@ -315,7 +335,7 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 		for len(rest) > 0 {
 			entry, nextRest, err := sunlight.ReadTileLeaf(rest)
 			if err != nil {
-				return nil, 500, err
+				return nil, 517, err
 			}
 			if entry.LeafIndex >= uint64(start) && entry.LeafIndex <= uint64(end) {
 				entries = append(entries, entry)
@@ -334,7 +354,7 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 		for _, fp := range entry.ChainFp {
 			data, err := f.get(ctx, fmt.Sprintf("issuer/%x", fp))
 			if err != nil {
-				return nil, 500, err
+				return nil, 518, err
 			}
 			chain = append(chain, ct.ASN1Cert{Data: data})
 		}
@@ -351,7 +371,7 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 
 		extraData, err := tls.Marshal(extra)
 		if err != nil {
-			return nil, 500, err
+			return nil, 519, err
 		}
 
 		leafEntry := ct.LeafEntry{
@@ -367,7 +387,7 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 
 	jsonBytes, err := json.Marshal(response)
 	if err != nil {
-		return nil, 500, err
+		return nil, 520, err
 	}
 
 	return jsonBytes, 200, nil
@@ -411,7 +431,7 @@ func (f Fetch) get_entry_and_proof(ctx context.Context, reqBody io.ReadCloser, q
 	tile.L = -1
 
 	// TODO: add a cache
-	data, err := f.get(ctx, tile.Path())
+	data, err := f.getTile(ctx, tile)
 	if err != nil {
 		return nil, 500, err
 	}
@@ -463,7 +483,7 @@ func (f Fetch) get_entry_and_proof(ctx context.Context, reqBody io.ReadCloser, q
 	}
 
 	// Get the proof
-	proof, err := tlog.ProveRecord(treeSize, leafIndex, hashreader(ctx, f))
+	proof, err := tlog.ProveRecord(treeSize, leafIndex, hashreader(ctx, f, treeSize))
 	if err != nil {
 		return nil, 500, err
 	}

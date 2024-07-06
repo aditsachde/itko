@@ -39,7 +39,6 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 		Name:          logName,
 		KeyPath:       "./testdata/ct-http-server.privkey.plaintext.pem",
 		LogID:         "lrviNpCI/wLGL5VTfK25b8cOdbP0YA7tGoQak5jST9o=",
-		RootPath:      "",
 		ListenAddress: "localhost:3030",
 
 		S3Bucket:                   minioBucket,

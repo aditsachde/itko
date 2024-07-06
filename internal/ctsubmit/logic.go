@@ -159,7 +159,7 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 	// Before we send the unsequenced entry to the first stage, we need to check if it's a duplicate
 	// This is done by hashing the certificate fingerprint and checking if it exists in the dedupe map
 	dedupeKey := entry.CertificateFp[:]
-	dedupeVal, err := d.bucket.Get(ctx, fmt.Sprintf("ct/v1/dedupe/%x", dedupeKey))
+	dedupeVal, err := d.bucket.Get(ctx, fmt.Sprintf("ct/unstable/dedupe/%x", dedupeKey))
 
 	var completeEntry sunlight.LogEntry
 
@@ -386,7 +386,7 @@ func (d *stageTwoData) stageTwo(
 					return fmt.Errorf("failed to encode leaf record hash %d: %w", recordHash.leafIndex, err)
 				}
 
-				err = d.bucket.Set(ctx, fmt.Sprintf("ct/v1/leaf-record-hash/%x", recordHash.hash[:]), indexBuf.Bytes())
+				err = d.bucket.Set(ctx, fmt.Sprintf("ct/unstable/leaf-record-hash/%x", recordHash.hash[:]), indexBuf.Bytes())
 				if err != nil {
 					return fmt.Errorf("failed to upload leaf record hash %d: %w", recordHash.leafIndex, err)
 				}
@@ -438,7 +438,7 @@ func (d *stageTwoData) stageTwo(
 					return fmt.Errorf("failed to encode timestamp %d: %w", e.entry.Timestamp, err)
 				}
 
-				err = d.bucket.Set(ctx, fmt.Sprintf("ct/v1/dedupe/%x", dedupeKey), dedupeVal.Bytes())
+				err = d.bucket.Set(ctx, fmt.Sprintf("ct/unstable/dedupe/%x", dedupeKey), dedupeVal.Bytes())
 				if err != nil {
 					// TODO: sunlight doesn't make this a hard failure, should we?
 					return fmt.Errorf("failed to upload dedupe mapping for %s: %w", dedupeKey, err)
