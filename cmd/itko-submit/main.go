@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
+	"os"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -23,6 +25,12 @@ func main() {
 	// Parse the command-line flags
 	kvpath := flag.String("kv-path", "", "Consul KV path")
 	flag.Parse()
+
+	if *kvpath == "" {
+		fmt.Println("Error: -kv-path flag must be set")
+		flag.Usage() // Print the usage message
+		os.Exit(1)   // Exit with a non-zero status
+	}
 
 	listener, err := net.Listen("tcp", "localhost:8080")
 	if err != nil {

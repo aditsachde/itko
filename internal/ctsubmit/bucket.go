@@ -82,7 +82,7 @@ func (b *Bucket) Exists(ctx context.Context, key string) (bool, error) {
 // --------------------------------------------------------------------------------------------
 
 type RecordHashUpload struct {
-	hash      [16]byte // birthday bound of 2⁴⁸ entries with collision chance 2⁻³²
+	hash      [16]byte // if 16 bytes is good enough for sunlight, its good enough for us
 	leafIndex uint64
 	hashPath  string
 }
@@ -215,7 +215,7 @@ func (b *Bucket) GetRecordHash(ctx context.Context, hash [16]byte, mask int) (Re
 // --------------------------------------------------------------------------------------------
 
 type DedupeUpload struct {
-	hash      [16]byte // birthday bound of 2⁴⁸ entries with collision chance 2⁻³²
+	hash      [16]byte // if 16 bytes is good enough for sunlight, its good enough for us
 	leafIndex uint64
 	timestamp int64
 	hashPath  string
