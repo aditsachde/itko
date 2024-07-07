@@ -2,7 +2,9 @@ package sunlight
 
 import (
 	"crypto/ecdsa"
+	"encoding/hex"
 	"encoding/json"
+	"strings"
 
 	ct "github.com/google/certificate-transparency-go"
 )
@@ -50,4 +52,23 @@ func SignTreeHead(k *ecdsa.PrivateKey, treeSize, timestamp uint64, sha256RootHas
 	}
 
 	return jsonBytes, err
+}
+
+func KAnonHashPath(h []byte, mask int) string {
+	hash := hex.EncodeToString(h[:])[0:mask]
+
+	// Split the hash into 2-character segments separated by slashes.
+	var builder strings.Builder
+	n := len(hash)
+	for i := 0; i < n; i += 2 {
+		if i > 0 {
+			builder.WriteString("/")
+		}
+		end := i + 2
+		if end > n {
+			end = n
+		}
+		builder.WriteString(hash[i:end])
+	}
+	return builder.String()
 }

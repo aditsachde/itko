@@ -1,11 +1,9 @@
 package ctsubmit
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -158,25 +156,14 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 
 	// Before we send the unsequenced entry to the first stage, we need to check if it's a duplicate
 	// This is done by hashing the certificate fingerprint and checking if it exists in the dedupe map
-	dedupeKey := entry.CertificateFp[:]
-	dedupeVal, err := d.bucket.Get(ctx, fmt.Sprintf("ct/unstable/dedupe/%x", dedupeKey))
+	dedupeKey := [16]byte(entry.CertificateFp[:16])
+	dedupeVal, err := d.bucket.GetDedupeEntry(ctx, dedupeKey, d.maskSize)
 
 	var completeEntry sunlight.LogEntry
 
 	if err == nil {
 		// If we recieved a valid cache hit, then the certificate is a duplicate
-		buf := bytes.NewReader(dedupeVal)
-		var leafIndex uint64
-		var timestamp int64
-		err := binary.Read(buf, binary.LittleEndian, &leafIndex)
-		if err != nil {
-			return nil, 500, err
-		}
-		err = binary.Read(buf, binary.LittleEndian, &timestamp)
-		if err != nil {
-			return nil, 500, err
-		}
-		completeEntry = entry.Sequence(leafIndex, timestamp)
+		completeEntry = entry.Sequence(dedupeVal.leafIndex, dedupeVal.timestamp)
 	} else {
 		// Otherwise, we need to send it to the sequencer
 
@@ -309,20 +296,18 @@ func (d *stageTwoData) stageTwo(
 			hashReader := d.hashReader(newHashes)
 
 			// these are the hashes of the merkle tree leaves and are needed later
-			recordHashes := make([]struct {
-				hash      tlog.Hash
-				leafIndex int64
-			}, 0, len(pool))
+			recordHashes := make([]RecordHashUpload, 0, len(pool))
 
 			// This is the right most data tile
 			dataTile := d.edgeTiles[-1]
 
 			for _, e := range pool {
 				recordHash := tlog.RecordHash(e.entry.MerkleTreeLeaf())
-				recordHashes = append(recordHashes, struct {
-					hash      tlog.Hash
-					leafIndex int64
-				}{recordHash, int64(e.entry.LeafIndex)})
+				recordHashShort := [16]byte(recordHash[:16])
+				recordHashes = append(recordHashes, RecordHashUpload{
+					hash:      recordHashShort,
+					leafIndex: e.entry.LeafIndex,
+				})
 				hashes, err := tlog.StoredHashesForRecordHash(int64(e.entry.LeafIndex), recordHash, hashReader)
 				if err != nil {
 					return fmt.Errorf("failed to calculate new hashes for leaf %d: %w", e.entry.LeafIndex, err)
@@ -378,18 +363,9 @@ func (d *stageTwoData) stageTwo(
 			d.edgeTiles = newEdgeTiles
 
 			// ** Upload the v1 leaf record hash mappings **
-			// TODO: this will literally blow up S3
-			for _, recordHash := range recordHashes {
-				indexBuf := new(bytes.Buffer)
-				err := binary.Write(indexBuf, binary.LittleEndian, recordHash.leafIndex)
-				if err != nil {
-					return fmt.Errorf("failed to encode leaf record hash %d: %w", recordHash.leafIndex, err)
-				}
-
-				err = d.bucket.Set(ctx, fmt.Sprintf("ct/unstable/leaf-record-hash/%x", recordHash.hash[:]), indexBuf.Bytes())
-				if err != nil {
-					return fmt.Errorf("failed to upload leaf record hash %d: %w", recordHash.leafIndex, err)
-				}
+			err := d.bucket.PutRecordHashes(ctx, recordHashes, d.maskSize)
+			if err != nil {
+				return fmt.Errorf("failed to upload record hashes: %w", err)
 			}
 
 			// ** Upload new intermediate certificates **
@@ -421,28 +397,21 @@ func (d *stageTwoData) stageTwo(
 			}
 
 			// ** Upload the dedupe mappings **
-			// TODO: this will also blow up S3
+			// TODO: This isn't the best cache key, because it fails to distinguish between
+			// a certificate that is submitted with a different chain. This is a problem because
+			// I think the specific chain the certificate was submitted with also matters.
+			dedupeVals := make([]DedupeUpload, 0, len(pool))
 			for _, e := range pool {
-				// TODO: This isn't the best cache key, because it fails to distinguish between
-				// a certificate that is submitted with a different chain. This is a problem because
-				// I think the specific chain the certificate was submitted with also matters.
-				dedupeKey := e.entry.CertificateFp[:]
-
-				dedupeVal := new(bytes.Buffer)
-				err := binary.Write(dedupeVal, binary.LittleEndian, e.entry.LeafIndex)
-				if err != nil {
-					return fmt.Errorf("failed to encode leaf index %d: %w", e.entry.LeafIndex, err)
-				}
-				err = binary.Write(dedupeVal, binary.LittleEndian, e.entry.Timestamp)
-				if err != nil {
-					return fmt.Errorf("failed to encode timestamp %d: %w", e.entry.Timestamp, err)
-				}
-
-				err = d.bucket.Set(ctx, fmt.Sprintf("ct/unstable/dedupe/%x", dedupeKey), dedupeVal.Bytes())
-				if err != nil {
-					// TODO: sunlight doesn't make this a hard failure, should we?
-					return fmt.Errorf("failed to upload dedupe mapping for %s: %w", dedupeKey, err)
-				}
+				hash := [16]byte(e.entry.CertificateFp[:16])
+				dedupeVals = append(dedupeVals, DedupeUpload{
+					hash:      hash,
+					leafIndex: e.entry.LeafIndex,
+					timestamp: e.entry.Timestamp,
+				})
+			}
+			err = d.bucket.PutDedupeEntries(ctx, dedupeVals, d.maskSize)
+			if err != nil {
+				return fmt.Errorf("failed to upload dedupe mappings: %w", err)
 			}
 
 			// ** Everything is uploaded, return the log entries **

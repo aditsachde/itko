@@ -1,7 +1,9 @@
 package ctmonitor
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net/http"
@@ -12,11 +14,13 @@ import (
 
 type Fetch struct {
 	urlPrefix string
+	maskSize  int
 }
 
-func newFetch(urlPrefix string) Fetch {
+func newFetch(urlPrefix string, maskSize int) Fetch {
 	return Fetch{
 		urlPrefix: urlPrefix,
+		maskSize:  maskSize,
 	}
 }
 
@@ -84,4 +88,43 @@ func (f *Fetch) getTileAAAA(ctx context.Context, tile tlog.Tile, finalTile tlog.
 		}
 	}
 	return resp, err
+}
+
+// TODO: refactor the duplicate definitions of this stanza in this file and bucket.go
+// to be in the sunlight package.
+const (
+	RHURecordSize = 21
+	RHUHashSize   = 16
+	// Sunlight defines index size to be 40 bits or 5 bytes
+	RHULeafIndexSize = 5
+)
+
+func (f *Fetch) getIndexForHash(ctx context.Context, hash []byte) (int64, error) {
+	// check if hash is 32 bytes
+	if len(hash) != RHUHashSize {
+		return 0, errors.New("hash must be 32 bytes")
+	}
+
+	path := sunlight.KAnonHashPath(hash, f.maskSize)
+	file, err := f.get(ctx, "int/hashes/"+path)
+	if err != nil {
+		return 0, err
+	}
+
+	recordCount := len(file) / RHURecordSize
+
+	for i := 0; i < recordCount; i++ {
+		if bytes.Equal(hash[:], file[i*RHURecordSize:(i*RHURecordSize)+RHUHashSize]) {
+			// Create a buffer for the full 64-bit timestamp
+			fullIndxeBytes := make([]byte, 8)
+			// Copy the 5 bytes to the buffer
+			copy(fullIndxeBytes[0:5], file[(i*RHURecordSize)+RHUHashSize:(i+1)*RHURecordSize])
+			// Convert to uint64
+			leafIndex := binary.LittleEndian.Uint64(fullIndxeBytes)
+
+			return int64(leafIndex), nil
+		}
+	}
+
+	return 0, errors.New("record not found")
 }

@@ -40,6 +40,7 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 		KeyPath:       "./testdata/ct-http-server.privkey.plaintext.pem",
 		LogID:         "lrviNpCI/wLGL5VTfK25b8cOdbP0YA7tGoQak5jST9o=",
 		ListenAddress: "localhost:3030",
+		MaskSize:      5,
 
 		S3Bucket:                   minioBucket,
 		S3Region:                   minioRegion,
@@ -66,9 +67,10 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 	}
 
 	ctmonitortileurl := minioEndpoint + "/" + minioBucket + "/"
+	ctmonitormasksize := config.MaskSize
 
 	go ctsubmit.MainMain(ctx, submitListener, logName, consulEndpoint, startSignal)
-	go ctmonitor.MainMain(monitorListener, ctmonitortileurl, startSignal)
+	go ctmonitor.MainMain(monitorListener, ctmonitortileurl, ctmonitormasksize, startSignal)
 	proxy(config.ListenAddress, monitorListener.Addr().String(), submitListener.Addr().String())
 }
 

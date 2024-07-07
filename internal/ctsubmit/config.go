@@ -26,6 +26,7 @@ type GlobalConfig struct {
 	KeyPath       string `json:"keyPath"`
 	LogID         string `json:"logID"`
 	ListenAddress string `json:"listenAddress"`
+	MaskSize      int    `json:"maskSize"`
 
 	S3Bucket                   string `json:"s3Bucket"`
 	S3Region                   string `json:"s3Region"`
@@ -69,6 +70,7 @@ type stageZeroData struct {
 	notAfterLimit time.Time
 	logID         [32]byte
 	bucket        Bucket
+	maskSize      int
 
 	signingKey *ecdsa.PrivateKey
 }
@@ -85,6 +87,7 @@ type stageTwoData struct {
 
 	bucket    Bucket
 	edgeTiles map[int]tileWithBytes
+	maskSize  int
 
 	signingKey *ecdsa.PrivateKey
 }
@@ -265,6 +268,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 			notAfterLimit: notAfterLimit,
 			logID:         logIDArray,
 			bucket:        bucket,
+			maskSize:      gc.MaskSize,
 
 			signingKey: key,
 		}
@@ -343,6 +347,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 
 			bucket:    bucket,
 			edgeTiles: edgeTiles,
+			maskSize:  gc.MaskSize,
 
 			signingKey: key,
 		}

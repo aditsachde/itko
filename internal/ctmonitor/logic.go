@@ -1,10 +1,8 @@
 package ctmonitor
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,8 +20,8 @@ import (
 )
 
 // TODO: Evaluate if the context is actually needed
-func Start(ctx context.Context, tileStoreUrl string) (http.Handler, error) {
-	f := newFetch(tileStoreUrl)
+func Start(ctx context.Context, tileStoreUrl string, maskSize int) (http.Handler, error) {
+	f := newFetch(tileStoreUrl, maskSize)
 
 	// Wrap the HTTP handler function with OTel instrumentation
 	wGetSth := otelhttp.NewHandler(http.HandlerFunc(wrapper(f.get_sth)), "get-sth")
@@ -196,16 +194,10 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 		return nil, 400, err
 	}
 
-	// fetch the index using the hash
-	indexBytes, err := f.get(ctx, fmt.Sprintf("ct/unstable/leaf-record-hash/%x", hash))
+	// Use the hash to fetch the index
+	index, err := f.getIndexForHash(ctx, hash[:16])
 	if err != nil {
 		return nil, 404, err
-	}
-
-	var index int64
-	err = binary.Read(bytes.NewReader(indexBytes), binary.LittleEndian, &index)
-	if err != nil {
-		return nil, 510, err
 	}
 
 	if index < 0 || index >= treeSize {
