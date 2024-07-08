@@ -19,8 +19,8 @@ import (
 
 func main() {
 	// Setup OpenTelemetry
-	shutdownOtel := configureOtel()
-	defer shutdownOtel()
+	// shutdownOtel := configureOtel()
+	// defer shutdownOtel()
 
 	// Parse the command-line flags
 	kvpath := flag.String("kv-path", "", "Consul KV path")
