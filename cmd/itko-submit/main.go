@@ -24,6 +24,7 @@ func main() {
 
 	// Parse the command-line flags
 	kvpath := flag.String("kv-path", "", "Consul KV path")
+	listenAddress := flag.String("listen-address", "", "IP and port to listen on for incoming connections.")
 	flag.Parse()
 
 	if *kvpath == "" {
@@ -32,7 +33,13 @@ func main() {
 		os.Exit(1)   // Exit with a non-zero status
 	}
 
-	listener, err := net.Listen("tcp", "localhost:8080")
+	if *listenAddress == "" {
+		fmt.Println("Error: -listen-address flag must be set")
+		flag.Usage() // Print the usage message
+		os.Exit(1)   // Exit with a non-zero status
+	}
+
+	listener, err := net.Listen("tcp", *listenAddress)
 	if err != nil {
 		log.Fatalf("failed to bind to address: %v", err)
 	}
