@@ -110,12 +110,15 @@ func minioSetup(ctx context.Context) (string, string, string, string, string, fu
 		log.Fatalf("failed to start container: %s", err)
 	}
 
-	minioEndpoint, err := minioContainer.ConnectionString(ctx)
+	// Instead of using the minioContainer.ConnectionString method, we're building 
+	// the endpoint string ourselves, because by default, it returns a string that 
+	// uses localhost. However, this does not seem to work when running on GH Actions.
+	minioPort, err := minioContainer.MappedPort(ctx, "9000/tcp")
 	if err != nil {
-		log.Fatalf("failed to get connection string: %s", err)
+		log.Fatalf("failed to get mapped port: %s", err)
 	}
 
-	minioEndpoint = "http://" + minioEndpoint
+	minioEndpoint := "http://127.0.0.1:" + minioPort.Port()
 	minioUsername, minioPassword := minioContainer.Username, minioContainer.Password
 
 	// We could do this by adding to the ctlog.Bucket, but this will never be used otherwise
