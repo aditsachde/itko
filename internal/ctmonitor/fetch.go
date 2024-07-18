@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
+	ct "github.com/google/certificate-transparency-go"
 	"golang.org/x/mod/sumdb/tlog"
 	"itko.dev/internal/sunlight"
 )
@@ -48,16 +50,17 @@ func (f *Fetch) getWithStatus(ctx context.Context, key string) ([]byte, error, i
 	return body, nil, 200
 }
 
-func (f *Fetch) getMulti(ctx context.Context, keys []string) ([][]byte, error) {
-	var bodies [][]byte
-	for _, key := range keys {
-		body, err := f.get(ctx, key)
-		if err != nil {
-			return nil, err
-		}
-		bodies = append(bodies, body)
+func (f *Fetch) getSth(ctx context.Context) (ct.SignedTreeHead, error) {
+	sthBytes, err := f.get(ctx, "ct/v1/get-sth")
+	if err != nil {
+		return ct.SignedTreeHead{}, err
 	}
-	return bodies, nil
+	var sth ct.SignedTreeHead
+	err = json.Unmarshal(sthBytes, &sth)
+	if err != nil {
+		return ct.SignedTreeHead{}, err
+	}
+	return sth, nil
 }
 
 func (f *Fetch) getTile(ctx context.Context, tile tlog.Tile) ([]byte, error) {
@@ -99,6 +102,7 @@ const (
 	RHULeafIndexSize = 5
 )
 
+// TODO: convert these to use binary search
 func (f *Fetch) getIndexForHash(ctx context.Context, hash []byte) (int64, error) {
 	// check if hash is 32 bytes
 	if len(hash) != RHUHashSize {

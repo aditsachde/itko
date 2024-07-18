@@ -124,16 +124,10 @@ func (f Fetch) get_sth_consistency(ctx context.Context, reqBody io.ReadCloser, q
 		return nil, 400, fmt.Errorf("first must be less than or equal to second")
 	}
 
-	// TODO: but what if we didn't need this?
-	sthBytes, err := f.get(ctx, "ct/v1/get-sth")
+	sth, err := f.getSth(ctx)
 	if err != nil {
 		// TODO: Fix all the response status codes
 		return nil, 521, err
-	}
-	var sth ct.SignedTreeHead
-	err = json.Unmarshal(sthBytes, &sth)
-	if err != nil {
-		return nil, 522, err
 	}
 
 	if first > int64(sth.TreeSize) || second > int64(sth.TreeSize) {
@@ -149,7 +143,6 @@ func (f Fetch) get_sth_consistency(ctx context.Context, reqBody io.ReadCloser, q
 	if first >= 1 {
 		proof, err = tlog.ProveTree(second, first, hashreader(ctx, f, second))
 		if err != nil {
-			log.Println(err)
 			return nil, 523, err
 		}
 	}
@@ -192,6 +185,14 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 	treeSize, err := strconv.ParseInt(treeSizeStr, 10, 64)
 	if err != nil {
 		return nil, 400, err
+	}
+
+	sth, err := f.getSth(ctx)
+	if err != nil {
+		return nil, 500, err
+	}
+	if treeSize > int64(sth.TreeSize) {
+		return nil, 400, fmt.Errorf("tree size is larger than the current sth")
 	}
 
 	// Use the hash to fetch the index
@@ -261,6 +262,14 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 	// Limit the number of entries fetched at once to 1000
 	if end-start > 1000 {
 		end = start + 1000
+	}
+
+	sth, err := f.getSth(ctx)
+	if err != nil {
+		return nil, 521, err
+	}
+	if end >= int64(sth.TreeSize) {
+		end = int64(sth.TreeSize) - 1
 	}
 
 	// Get the first and last tiles, -1 signifies a data tile
@@ -416,6 +425,14 @@ func (f Fetch) get_entry_and_proof(ctx context.Context, reqBody io.ReadCloser, q
 
 	if leafIndex < 0 || leafIndex >= treeSize {
 		return nil, 400, fmt.Errorf("index out of range")
+	}
+
+	sth, err := f.getSth(ctx)
+	if err != nil {
+		return nil, 500, err
+	}
+	if treeSize > int64(sth.TreeSize) {
+		return nil, 400, fmt.Errorf("tree size is larger than the current sth")
 	}
 
 	// Get the entry

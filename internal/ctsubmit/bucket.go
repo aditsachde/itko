@@ -125,6 +125,7 @@ func BytesToRecord(b []byte) (RecordHashUpload, error) {
 }
 
 // TODO: This NEEDS unit testing
+// TODO: convert these to use binary search
 func (b *Bucket) PutRecordHashes(ctx context.Context, hashes []RecordHashUpload, mask int) error {
 	f := make(map[string][]byte)
 
