@@ -96,7 +96,7 @@ func TestCTHammer(t *testing.T) {
 			ctfe.GetSTHName:            2,
 			ctfe.GetSTHConsistencyName: 2,
 			ctfe.GetProofByHashName:    2,
-			ctfe.GetEntriesName:        0, // this should be 2
+			ctfe.GetEntriesName:        2,
 			ctfe.GetRootsName:          1,
 			ctfe.GetEntryAndProofName:  0, // hammering entrypoint GetEntryAndProof not yet implemented upstream
 		},

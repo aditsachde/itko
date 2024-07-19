@@ -27,4 +27,4 @@ jobs:
           go-version-file: "go.mod"
       - name: Run integration test
         working-directory: integration
-        run: go test -run ^TestCTHammer$
+        run: go test -timeout 1h -run ^TestCTHammer$
