@@ -281,8 +281,6 @@ func (d *stageTwoData) stageTwo(
 				return fmt.Errorf("stage two: stageTwoRx channel closed")
 			}
 
-			// TODO: Process the pool
-
 			// The current tree size is the same as the index of the first leaf in the pool
 			oldTreeSize := pool[0].entry.LeafIndex
 			// LeafIndex is zero-indexed, so the tree size is the last leaf index + 1
