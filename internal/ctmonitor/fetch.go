@@ -64,33 +64,18 @@ func (f *Fetch) getSth(ctx context.Context) (ct.SignedTreeHead, error) {
 }
 
 func (f *Fetch) getTile(ctx context.Context, tile tlog.Tile) ([]byte, error) {
+	fallbackWidth := tile.W
+	tile.W = sunlight.TileWidth
 	resp, err, status := f.getWithStatus(ctx, tile.Path())
-	// In case the tile is not found and its a partial, try to fetch the full width tile
+	// In case the tile is not found, try to fetch the partial tile
 	if status == 404 {
-		if tile.W != sunlight.TileWidth {
-			tile.W = sunlight.TileWidth
+		if fallbackWidth != sunlight.TileWidth {
+			tile.W = fallbackWidth
 			return f.get(ctx, tile.Path())
 		}
 	}
 	return resp, err
 
-}
-
-// TODO: there has *got* to be a better way to do this
-func (f *Fetch) getTileAAAA(ctx context.Context, tile tlog.Tile, finalTile tlog.Tile) ([]byte, error) {
-	resp, err, status := f.getWithStatus(ctx, tile.Path())
-	// In case the tile is not found and its a partial, try to fetch the full width tile
-	if status == 404 {
-		if tile.W != sunlight.TileWidth {
-			tile.W = sunlight.TileWidth
-			resp2, err2, status2 := f.getWithStatus(ctx, tile.Path())
-			if status2 == 404 {
-				return f.get(ctx, finalTile.Path())
-			}
-			return resp2, err2
-		}
-	}
-	return resp, err
 }
 
 // TODO: refactor the duplicate definitions of this stanza in this file and bucket.go

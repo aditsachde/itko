@@ -3,13 +3,28 @@ name: Integration Test
 on: [push]
 
 jobs:
-  test:
+  integration-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Setup Go
         uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
       - name: Run integration test
         working-directory: integration
         run: go test -run ^TestCTIntegration$
+
+  hammer-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+      - name: Run integration test
+        working-directory: integration
+        run: go test -run ^TestCTHammer$

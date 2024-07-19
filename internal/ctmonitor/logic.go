@@ -66,13 +66,20 @@ func wrapper(wrapped func(ctx context.Context, reqBody io.ReadCloser, query url.
 }
 
 func hashreader(ctx context.Context, f Fetch, fallbackTreeSize int64) tlog.HashReaderFunc {
-	finalTile := tlog.TileForIndex(sunlight.TileHeight, fallbackTreeSize)
+	// Tree size is 1 greater than the index of the last entry
+	finalTile := tlog.TileForIndex(sunlight.TileHeight, tlog.StoredHashIndex(0, fallbackTreeSize-1))
 	// TODO: add some sort of cache here, this function is bound to be called a few times for the same tiles
 	return func(indexes []int64) ([]tlog.Hash, error) {
 		hashes := make([]tlog.Hash, 0, len(indexes))
 		for _, index := range indexes {
 			tile := tlog.TileForIndex(sunlight.TileHeight, index)
-			data, err := f.getTileAAAA(ctx, tile, finalTile)
+			// Special case the final tile to get the correct width
+			if tile.N == finalTile.N {
+				tile.W = finalTile.W
+			}
+			// This function will always first try and get the full width tile,
+			// and then fall back to the width actually specified in the tile.
+			data, err := f.getTile(ctx, tile)
 			if err != nil {
 				return nil, fmt.Errorf("failed to fetch tile %s: %w (fallback %s)", tile.Path(), err, finalTile.Path())
 			}
@@ -118,6 +125,10 @@ func (f Fetch) get_sth_consistency(ctx context.Context, reqBody io.ReadCloser, q
 	second, err := strconv.ParseInt(secondStr, 10, 64)
 	if err != nil {
 		return nil, 400, err
+	}
+
+	if first < 0 || second < 0 {
+		return nil, 400, fmt.Errorf("parameters must be positive")
 	}
 
 	if first > second {
