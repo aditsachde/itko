@@ -50,6 +50,7 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 
 		NotAfterStart: "2020-01-01T00:00:00Z",
 		NotAfterLimit: "2030-01-01T00:00:00Z",
+		FlushMs:       50,
 	}
 
 	ctsetup.MainMain(ctx, consulEndpoint, logName, "./testdata/fake-ca.cert", "./testdata/ct-http-server.privkey.plaintext.pem", config)
@@ -110,8 +111,8 @@ func minioSetup(ctx context.Context) (string, string, string, string, string, fu
 		log.Fatalf("failed to start container: %s", err)
 	}
 
-	// Instead of using the minioContainer.ConnectionString method, we're building 
-	// the endpoint string ourselves, because by default, it returns a string that 
+	// Instead of using the minioContainer.ConnectionString method, we're building
+	// the endpoint string ourselves, because by default, it returns a string that
 	// uses localhost. However, this does not seem to work when running on GH Actions.
 	minioPort, err := minioContainer.MappedPort(ctx, "9000/tcp")
 	if err != nil {

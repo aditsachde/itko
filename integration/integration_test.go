@@ -124,7 +124,7 @@ func TestCTHammer(t *testing.T) {
 		OversizedGetEntries: false, // TODO: fix so this can be true
 		Operations:          10000,
 		Limiter:             nil,
-		MaxParallelChains:   100,
+		MaxParallelChains:   400,
 		IgnoreErrors:        false,            // TODO: fix so this can be false
 		MaxRetryDuration:    time.Second * 10, // Doesn't matter since IgnoreErrors is false
 		RequestDeadline:     time.Second * 5,

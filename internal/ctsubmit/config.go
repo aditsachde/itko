@@ -36,6 +36,7 @@ type GlobalConfig struct {
 
 	NotAfterStart string `json:"notAfterStart"`
 	NotAfterLimit string `json:"notAfterLimit"`
+	FlushMs       int    `json:"flushMs"`
 }
 
 type Log struct {
@@ -80,6 +81,7 @@ type stageOneData struct {
 	stageTwoTx chan<- []LogEntryWithReturnPath
 
 	startingSequence uint64
+	flushMs          int
 }
 
 type stageTwoData struct {
@@ -282,6 +284,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 
 			// Starting index is zero indexed, so we don't need to add one
 			startingSequence: sth.TreeSize,
+			flushMs:          gc.FlushMs,
 		}
 	}
 

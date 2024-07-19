@@ -205,8 +205,7 @@ func (d *stageOneData) stageOne(
 	ctx context.Context,
 ) error {
 	const MAX_POOL_SIZE = 255
-	// const FLUSH_INTERVAL = time.Second
-	const FLUSH_INTERVAL = time.Millisecond * 500
+	var FLUSH_INTERVAL = time.Millisecond * time.Duration(d.flushMs)
 
 	// This variable will be incremented for each log entry
 	sequence := d.startingSequence
