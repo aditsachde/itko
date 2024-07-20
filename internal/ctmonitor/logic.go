@@ -291,6 +291,12 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 
 	dataTiles := make([]tileWithBytes, 0)
 
+	sthFinalTile := tlog.TileForIndex(sunlight.TileHeight, tlog.StoredHashIndex(0, int64(sth.TreeSize)-1))
+	// Special case the final tile to ensure we always fetch a tile that exists
+	if lastTile.N == sthFinalTile.N {
+		lastTile.W = sthFinalTile.W
+	}
+
 	// In this case, the last tile is the same as the first tile so we only need to fetch one tile
 	if firstTile.N == lastTile.N {
 		data, err := f.getTile(ctx, lastTile)
