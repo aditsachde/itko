@@ -122,7 +122,7 @@ func TestCTHammer(t *testing.T) {
 		MinGetEntries:       1,
 		MaxGetEntries:       1000,  // TODO: actual max is 1000
 		OversizedGetEntries: false, // TODO: fix so this can be true
-		Operations:          10000,
+		Operations:          30000,
 		Limiter:             nil,
 		MaxParallelChains:   20,
 		IgnoreErrors:        false,            // TODO: fix so this can be false
