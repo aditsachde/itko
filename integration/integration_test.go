@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -54,6 +55,8 @@ func TestCTIntegration(t *testing.T) {
 		log.Fatalln("🛑 Integration test failed:", err)
 	}
 }
+
+var longFlag = flag.Bool("long", false, "Run the hammer test with a large number of operations")
 
 func TestCTHammer(t *testing.T) {
 	// pprof endpoint
@@ -122,7 +125,7 @@ func TestCTHammer(t *testing.T) {
 		MinGetEntries:       1,
 		MaxGetEntries:       1000,  // TODO: actual max is 1000
 		OversizedGetEntries: false, // TODO: fix so this can be true
-		Operations:          30000,
+		Operations:          250,
 		Limiter:             nil,
 		MaxParallelChains:   20,
 		IgnoreErrors:        false,            // TODO: fix so this can be false
@@ -135,6 +138,11 @@ func TestCTHammer(t *testing.T) {
 		// but realistically we would rather just want to wait until 256 entries were stored and the full tile could be retrieved,
 		// as RFC6962 doesn't require us to be able to produce arbitrary proofs on demand.
 		StrictSTHConsistencySize: true,
+	}
+
+	flag.Parse()
+	if *longFlag {
+		hammerConfig.Operations = 50000
 	}
 
 	err = integration.HammerCTLog(context.Background(), hammerConfig)
