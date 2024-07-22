@@ -186,6 +186,9 @@ func (f Fetch) get_proof_by_hash(ctx context.Context, reqBody io.ReadCloser, que
 	if err != nil {
 		return nil, 400, err
 	}
+	if len(hash) != 32 {
+		return nil, 400, fmt.Errorf("hash must be 32 bytes")
+	}
 
 	// Get and parse the tree_size parameter
 	treeSizeStr := query.Get("tree_size")

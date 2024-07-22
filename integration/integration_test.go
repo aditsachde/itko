@@ -123,16 +123,16 @@ func TestCTHammer(t *testing.T) {
 		ClientPool:          pool,
 		EPBias:              bias,
 		MinGetEntries:       1,
-		MaxGetEntries:       1000,  // TODO: actual max is 1000
-		OversizedGetEntries: false, // TODO: fix so this can be true
+		MaxGetEntries:       1000,
+		OversizedGetEntries: true,
 		Operations:          250,
 		Limiter:             nil,
 		MaxParallelChains:   20,
-		IgnoreErrors:        false,            // TODO: fix so this can be false
+		IgnoreErrors:        false,
 		MaxRetryDuration:    time.Second * 10, // Doesn't matter since IgnoreErrors is false
 		RequestDeadline:     time.Second * 5,
 		DuplicateChance:     10, // Default value from certificate-transparency-go
-		// TODO: This is set to true because although we can produce a valid consistency proof between any two STH values,
+		// This is set to true because although we can produce a valid consistency proof between any two STH values,
 		// this will result in failures at times. Consider a tree with a size of 250, but entires 240 to 250 were added
 		// together. Then, a partial tile for entry 245 would not have been stored. We could instead retrieve the tile for 250,
 		// but realistically we would rather just want to wait until 256 entries were stored and the full tile could be retrieved,
