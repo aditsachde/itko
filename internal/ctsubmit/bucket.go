@@ -3,6 +3,7 @@ package ctsubmit
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -14,6 +15,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/google/certificate-transparency-go/x509"
+	"golang.org/x/mod/sumdb/tlog"
+	"golang.org/x/sync/errgroup"
 	"itko.dev/internal/sunlight"
 )
 
@@ -77,6 +81,28 @@ func (b *Bucket) Exists(ctx context.Context, key string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// --------------------------------------------------------------------------------------------
+
+func (b *Bucket) SetTile(ctx context.Context, tile tlog.Tile, data []byte) error {
+	return b.Set(ctx, tile.Path(), data)
+}
+
+func (b *Bucket) SetSth(ctx context.Context, data []byte) error {
+	return b.Set(ctx, "ct/v1/get-sth", data)
+}
+
+func (b *Bucket) SetIssuer(ctx context.Context, cert *x509.Certificate) error {
+	fingerprint := sha256.Sum256(cert.Raw)
+	exists, err := b.Exists(ctx, fmt.Sprintf("issuer/%x", fingerprint))
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return b.Set(ctx, fmt.Sprintf("issuer/%x", fingerprint), cert.Raw)
+	}
+	return nil
 }
 
 // --------------------------------------------------------------------------------------------
@@ -182,12 +208,15 @@ func (b *Bucket) PutRecordHashes(ctx context.Context, hashes []RecordHashUpload,
 		f[e.hashPath] = newRecords
 	}
 
+	
 	// Now, write the updated files back to the bucket.
+	g, gctx := errgroup.WithContext(ctx)
 	for k, v := range f {
-		err := b.Set(ctx, "int/hashes/"+k, v)
-		if err != nil {
-			return err
-		}
+		g.Go(func() error { return b.Set(gctx, "int/hashes/"+k, v) })
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	return nil
@@ -320,12 +349,15 @@ func (b *Bucket) PutDedupeEntries(ctx context.Context, hashes []DedupeUpload, ma
 		f[e.hashPath] = newRecords
 	}
 
+	
 	// Now, write the updated files back to the bucket.
+	g, gctx := errgroup.WithContext(ctx)
 	for k, v := range f {
-		err := b.Set(ctx, "int/dedupe/"+k, v)
-		if err != nil {
-			return err
-		}
+		g.Go(func() error { return b.Set(gctx, "int/dedupe/"+k, v) })
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	return nil
