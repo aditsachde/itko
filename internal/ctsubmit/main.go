@@ -20,6 +20,8 @@ func MainMain(ctx context.Context, listener net.Listener, kvpath, consulAddress 
 		log.Fatalf("Failed to create log object: %v", err)
 	}
 
+	log.Println("Starting CT log")
+
 	mux, err := ctloghandle.Start(context.Background())
 	if err != nil {
 		log.Fatalf("Failed to get log handler: %v", err)
