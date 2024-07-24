@@ -2,6 +2,12 @@
 
 Ikto is a new CT log that conforms to both the [Static CT](https://c2sp.org/static-ct-api) and [RFC6962](https://datatracker.ietf.org/doc/html/rfc6962) APIs. RFC6962 monitoring APIs are implemented via a stateless proxy supported by some additions to the base Static CT spec.
 
+## Public Instance
+
+An operating instance using this log implementation can be found at `https://alpha.itko.dev`.
+
+The log ID is `mBGudl5g4O7Und9cVLLj8utfINvxaLeJs8EJgQZqzrY=` and the public key can be found in [`alpha.itko.dev.public.der`](alpha.itko.dev.public.der)
+
 ## Motivation
 
 The Static CT spec is based on innovations in the transparency ecosystem that make logs cheaper and easier to run. By serving static tiles and allowing clients to construct proofs themselves, running these logs becomes operationally simpler and significantly cheaper, as large databases are no longer required. Instead, these logs can be run directly on S3 or simple filesystems. This spec also unlocks the integration of CT into other efforts, such as [witnessing](https://github.com/transparency-dev/armored-witness/tree/main). 
@@ -28,6 +34,10 @@ The `monitor` binary requires the configured mask size used for grouping the has
 ```
 itko-monitor -mask-size 5 -store-address 'http://localhost:9000/itkoalpha/' -listen-address 'localhost:3031'
 ```
+
+## Design
+
+Information about some high level design decisions can be found at [DESIGN.md](DESIGN.md)
 
 ## Acknowledgements
 
