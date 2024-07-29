@@ -201,13 +201,14 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 
 	stageOneCommChan := make(chan UnsequencedEntryWithReturnPath, 200)
 	stageTwoCommChan := make(chan []LogEntryWithReturnPath, 2)
-	bucket := NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+	s3Storage := NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+	bucket := Bucket{&s3Storage}
 
 	// Get the latest STH
 	var sth ct.SignedTreeHead
 	{
 		log.Println("Fetching latest STH")
-		sthBytes, err := bucket.Get(ctx, "ct/v1/get-sth")
+		sthBytes, err := bucket.S.Get(ctx, "ct/v1/get-sth")
 		if err != nil {
 			return nil, fmt.Errorf("unable to fetch STH: %v", err)
 		}
@@ -232,7 +233,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 		var res struct {
 			Certificates [][]byte `json:"certificates"`
 		}
-		roots, err := bucket.Get(ctx, "/ct/v1/get-roots")
+		roots, err := bucket.S.Get(ctx, "/ct/v1/get-roots")
 		if err != nil {
 			return nil, fmt.Errorf("unable to fetch roots: %v", err)
 		}
@@ -316,7 +317,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 			}, &sunlight.TileReader{
 				Fetch: func(key string) ([]byte, error) {
 					log.Println("Fetching tile", key)
-					return bucket.Get(ctx, key)
+					return bucket.S.Get(ctx, key)
 				}, SaveTilesInt: func(tiles []tlog.Tile, data [][]byte) {
 					for i, tile := range tiles {
 						if t, ok := edgeTiles[tile.L]; !ok || t.N < tile.N || (t.N == tile.N && t.W < tile.W) {
@@ -337,7 +338,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 			// the data tile is the same as the level zero tile, with L -1
 			dataTile.Tile.L = -1
 
-			dataTileBytes, err := bucket.Get(ctx, dataTile.Path())
+			dataTileBytes, err := bucket.S.Get(ctx, dataTile.Path())
 			if err != nil {
 				return nil, fmt.Errorf("unable to fetch data tile: %v", err)
 			}
@@ -359,7 +360,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 	}
 
 	log.Println("Log loaded successfully")
-	
+
 	return &Log{
 		config: gc,
 		eStop:  lock,

@@ -7,13 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/google/certificate-transparency-go/x509"
 	"golang.org/x/mod/sumdb/tlog"
@@ -22,85 +16,27 @@ import (
 )
 
 type Bucket struct {
-	client *s3.Client
-	bucket string
-}
-
-func NewBucket(region, bucket, endpoint, username, password string) Bucket {
-	s3Config := aws.Config{
-		Credentials:  credentials.NewStaticCredentialsProvider(username, password, ""),
-		BaseEndpoint: aws.String(endpoint),
-		Region:       region,
-	}
-
-	client := s3.NewFromConfig(s3Config, func(o *s3.Options) {
-		o.UsePathStyle = true
-	})
-
-	return Bucket{
-		client: client,
-		bucket: bucket,
-	}
-}
-
-func (b *Bucket) Get(ctx context.Context, key string) ([]byte, error) {
-	output, err := b.client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(b.bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer output.Body.Close()
-	data, err := io.ReadAll(output.Body)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
-func (b *Bucket) Set(ctx context.Context, key string, data []byte) error {
-	_, err := b.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(b.bucket),
-		Key:    aws.String(key),
-		Body:   bytes.NewReader(data),
-	})
-	return err
-}
-
-func (b *Bucket) Exists(ctx context.Context, key string) (bool, error) {
-	_, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(b.bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		var responseError *awshttp.ResponseError
-		if errors.As(err, &responseError) && responseError.ResponseError.HTTPStatusCode() == http.StatusNotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
+	S Storage
 }
 
 // --------------------------------------------------------------------------------------------
 
 func (b *Bucket) SetTile(ctx context.Context, tile tlog.Tile, data []byte) error {
-	return b.Set(ctx, tile.Path(), data)
+	return b.S.Set(ctx, tile.Path(), data)
 }
 
 func (b *Bucket) SetSth(ctx context.Context, data []byte) error {
-	return b.Set(ctx, "ct/v1/get-sth", data)
+	return b.S.Set(ctx, "ct/v1/get-sth", data)
 }
 
 func (b *Bucket) SetIssuer(ctx context.Context, cert *x509.Certificate) error {
 	fingerprint := sha256.Sum256(cert.Raw)
-	exists, err := b.Exists(ctx, fmt.Sprintf("issuer/%x", fingerprint))
+	exists, err := b.S.Exists(ctx, fmt.Sprintf("issuer/%x", fingerprint))
 	if err != nil {
 		return err
 	}
 	if !exists {
-		return b.Set(ctx, fmt.Sprintf("issuer/%x", fingerprint), cert.Raw)
+		return b.S.Set(ctx, fmt.Sprintf("issuer/%x", fingerprint), cert.Raw)
 	}
 	return nil
 }
@@ -167,7 +103,7 @@ func (b *Bucket) PutRecordHashes(ctx context.Context, hashes []RecordHashUpload,
 		}
 
 		var err error
-		f[e.hashPath], err = b.Get(ctx, "int/hashes/"+e.hashPath)
+		f[e.hashPath], err = b.S.Get(ctx, "int/hashes/"+e.hashPath)
 		if err != nil {
 			var notFound *s3types.NoSuchKey
 			if errors.As(err, &notFound) {
@@ -208,11 +144,10 @@ func (b *Bucket) PutRecordHashes(ctx context.Context, hashes []RecordHashUpload,
 		f[e.hashPath] = newRecords
 	}
 
-	
 	// Now, write the updated files back to the bucket.
 	g, gctx := errgroup.WithContext(ctx)
 	for k, v := range f {
-		g.Go(func() error { return b.Set(gctx, "int/hashes/"+k, v) })
+		g.Go(func() error { return b.S.Set(gctx, "int/hashes/"+k, v) })
 	}
 
 	if err := g.Wait(); err != nil {
@@ -223,7 +158,7 @@ func (b *Bucket) PutRecordHashes(ctx context.Context, hashes []RecordHashUpload,
 }
 
 func (b *Bucket) GetRecordHash(ctx context.Context, hash [16]byte, mask int) (RecordHashUpload, error) {
-	f, err := b.Get(ctx, "int/hashes/"+sunlight.KAnonHashPath(hash[:], mask))
+	f, err := b.S.Get(ctx, "int/hashes/"+sunlight.KAnonHashPath(hash[:], mask))
 	if err != nil {
 		return RecordHashUpload{}, err
 	}
@@ -308,7 +243,7 @@ func (b *Bucket) PutDedupeEntries(ctx context.Context, hashes []DedupeUpload, ma
 		}
 
 		var err error
-		f[e.hashPath], err = b.Get(ctx, "int/dedupe/"+e.hashPath)
+		f[e.hashPath], err = b.S.Get(ctx, "int/dedupe/"+e.hashPath)
 		if err != nil {
 			var notFound *s3types.NoSuchKey
 			if errors.As(err, &notFound) {
@@ -349,11 +284,10 @@ func (b *Bucket) PutDedupeEntries(ctx context.Context, hashes []DedupeUpload, ma
 		f[e.hashPath] = newRecords
 	}
 
-	
 	// Now, write the updated files back to the bucket.
 	g, gctx := errgroup.WithContext(ctx)
 	for k, v := range f {
-		g.Go(func() error { return b.Set(gctx, "int/dedupe/"+k, v) })
+		g.Go(func() error { return b.S.Set(gctx, "int/dedupe/"+k, v) })
 	}
 
 	if err := g.Wait(); err != nil {
@@ -364,7 +298,7 @@ func (b *Bucket) PutDedupeEntries(ctx context.Context, hashes []DedupeUpload, ma
 }
 
 func (b *Bucket) GetDedupeEntry(ctx context.Context, hash [16]byte, mask int) (DedupeUpload, error) {
-	f, err := b.Get(ctx, "int/dedupe/"+sunlight.KAnonHashPath(hash[:], mask))
+	f, err := b.S.Get(ctx, "int/dedupe/"+sunlight.KAnonHashPath(hash[:], mask))
 	if err != nil {
 		return DedupeUpload{}, err
 	}

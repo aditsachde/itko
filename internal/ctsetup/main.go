@@ -78,7 +78,7 @@ func uploadRoots(ctx context.Context, rootCerts string, gc ctsubmit.GlobalConfig
 		return err
 	}
 
-	bucket := ctsubmit.NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+	bucket := ctsubmit.NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
 	return bucket.Set(ctx, "/ct/v1/get-roots", rootBytes)
 
 }
@@ -105,6 +105,6 @@ func uploadEmptySth(ctx context.Context, signingKey string, gc ctsubmit.GlobalCo
 		return err
 	}
 
-	bucket := ctsubmit.NewBucket(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+	bucket := ctsubmit.NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
 	return bucket.Set(ctx, "/ct/v1/get-sth", jsonBytes)
 }
