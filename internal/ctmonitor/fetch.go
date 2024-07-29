@@ -6,8 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
 
 	ct "github.com/google/certificate-transparency-go"
 	"golang.org/x/mod/sumdb/tlog"
@@ -15,39 +13,20 @@ import (
 )
 
 type Fetch struct {
-	urlPrefix string
-	maskSize  int
+	s        Storage
+	maskSize int
 }
 
-func newFetch(urlPrefix string, maskSize int) Fetch {
+func newFetch(storage Storage, maskSize int) Fetch {
 	return Fetch{
-		urlPrefix: urlPrefix,
-		maskSize:  maskSize,
+		s:        storage,
+		maskSize: maskSize,
 	}
 }
 
 func (f *Fetch) get(ctx context.Context, key string) ([]byte, error) {
-	resp, err, _ := f.getWithStatus(ctx, key)
+	resp, _, err := f.s.Get(ctx, key)
 	return resp, err
-}
-
-func (f *Fetch) getWithStatus(ctx context.Context, key string) ([]byte, error, int) {
-	req, err := http.NewRequestWithContext(ctx, "GET", f.urlPrefix+key, nil)
-	if err != nil {
-		return nil, err, 500
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err, 500
-	}
-	if resp.StatusCode != 200 {
-		return nil, errors.New(resp.Status), resp.StatusCode
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err, 500
-	}
-	return body, nil, 200
 }
 
 func (f *Fetch) getSth(ctx context.Context) (ct.SignedTreeHead, error) {
@@ -66,9 +45,9 @@ func (f *Fetch) getSth(ctx context.Context) (ct.SignedTreeHead, error) {
 func (f *Fetch) getTile(ctx context.Context, tile tlog.Tile) ([]byte, error) {
 	fallbackWidth := tile.W
 	tile.W = sunlight.TileWidth
-	resp, err, status := f.getWithStatus(ctx, tile.Path())
+	resp, notfound, err := f.s.Get(ctx, tile.Path())
 	// In case the tile is not found, try to fetch the partial tile
-	if status == 404 {
+	if notfound == true {
 		if fallbackWidth != sunlight.TileWidth {
 			tile.W = fallbackWidth
 			return f.get(ctx, tile.Path())

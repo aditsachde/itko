@@ -202,7 +202,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 	stageOneCommChan := make(chan UnsequencedEntryWithReturnPath, 200)
 	stageTwoCommChan := make(chan []LogEntryWithReturnPath, 2)
 	s3Storage := NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
-	bucket := Bucket{&s3Storage}
+	bucket := Bucket{S: &s3Storage}
 
 	// Get the latest STH
 	var sth ct.SignedTreeHead
