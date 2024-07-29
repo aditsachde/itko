@@ -3,21 +3,13 @@ name: Integration Test
 on: [push]
 
 jobs:
-  integration-test-s3:
+  integration:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-      - name: Run integration test
-        working-directory: integration
-        run: go test -run ^TestCTIntegration$
+    strategy:
+      matrix:
+        test:
+          [TestCTIntegration, TestCTHammer, TestCTFsIntegration, TestCTFsHammer]
 
-  hammer-test-s3:
-    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,24 +17,13 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-      - name: Run integration test
-        working-directory: integration
-        run: go test -timeout 2h -run ^TestCTHammer$ -args -long
 
-  integration-test-fs:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
       - name: Run integration test
         working-directory: integration
-        run: go test -run ^TestCTFsIntegration$
+        run: go test -timeout 1h -run ^${{ matrix.test }}$ -args -long
 
-  hammer-test-fs:
+  build:
+    needs: integration
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -51,6 +32,17 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-      - name: Run integration test
-        working-directory: integration
-        run: go test -timeout 2h -run ^TestCTFsHammer$ -args -long
+
+      - name: Build
+        run: |
+          mkdir bin && cd bin
+          GOOS=linux GOARCH=arm64 go build -o itko-monitor-linux-arm64 ../cmd/itko-monitor
+          GOOS=linux GOARCH=amd64 go build -o itko-monitor-linux-amd64 ../cmd/itko-monitor
+          GOOS=linux GOARCH=arm64 go build -o itko-submit-linux-arm64 ../cmd/itko-submit
+          GOOS=linux GOARCH=amd64 go build -o itko-submit-linux-amd64 ../cmd/itko-submit
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "bin"
+          path: "bin/"
