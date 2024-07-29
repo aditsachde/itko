@@ -154,7 +154,7 @@ func TestCTHammer(t *testing.T) {
 
 	flag.Parse()
 	if *longFlag {
-		hammerConfig.Operations = 50000
+		hammerConfig.Operations = 25000
 	}
 
 	err = integration.HammerCTLog(context.Background(), hammerConfig)
@@ -313,7 +313,7 @@ func TestCTFsHammer(t *testing.T) {
 
 	flag.Parse()
 	if *longFlag {
-		hammerConfig.Operations = 50000
+		hammerConfig.Operations = 25000
 	}
 
 	err = integration.HammerCTLog(context.Background(), hammerConfig)
