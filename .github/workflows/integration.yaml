@@ -3,7 +3,7 @@ name: Integration Test
 on: [push]
 
 jobs:
-  integration-test:
+  integration-test-s3:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -16,7 +16,7 @@ jobs:
         working-directory: integration
         run: go test -run ^TestCTIntegration$
 
-  hammer-test:
+  hammer-test-s3:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,3 +28,29 @@ jobs:
       - name: Run integration test
         working-directory: integration
         run: go test -timeout 2h -run ^TestCTHammer$ -args -long
+
+  integration-test-fs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+      - name: Run integration test
+        working-directory: integration
+        run: go test -run ^TestCTFsIntegration$
+
+  hammer-test-fs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+      - name: Run integration test
+        working-directory: integration
+        run: go test -timeout 2h -run ^TestCTFsHammer$ -args -long
