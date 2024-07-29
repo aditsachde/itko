@@ -25,16 +25,17 @@ import (
 // TODO: Evaluate if the context is actually needed
 func (l *Log) Start(ctx context.Context) (http.Handler, error) {
 	// Start the stages
-	// TODO: somehow bail if these return an error
 	go func() {
-		if err := l.stageOneData.stageOne(ctx); err != nil {
-			fmt.Printf("Error in stageOne: %v\n", err)
-		}
+		err := l.stageOneData.stageOne(ctx)
+		fmt.Printf("Error in stageOne: %v\n", err)
+		fmt.Println("Stopping log now!")
+		l.eStop.Unlock()
 	}()
 	go func() {
-		if err := l.stageTwoData.stageTwo(ctx); err != nil {
-			fmt.Printf("Error in stageTwo: %v\n", err)
-		}
+		err := l.stageTwoData.stageTwo(ctx)
+		fmt.Printf("Error in stageTwo: %v\n", err)
+		fmt.Println("Stopping log now!")
+		l.eStop.Unlock()
 	}()
 
 	// Wrap the HTTP handler function with OTel instrumentation
