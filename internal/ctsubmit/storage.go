@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
@@ -77,6 +78,42 @@ func (b *S3Storage) Exists(ctx context.Context, key string) (bool, error) {
 	if err != nil {
 		var responseError *awshttp.ResponseError
 		if errors.As(err, &responseError) && responseError.ResponseError.HTTPStatusCode() == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// ------------------------------------------------------------
+
+type FsStorage struct {
+	root string
+}
+
+func NewFsStorage(rootDirectory string) FsStorage {
+	return FsStorage{
+		root: rootDirectory,
+	}
+}
+
+func (f *FsStorage) Get(ctx context.Context, key string) ([]byte, error) {
+	// try and read the file using os.Readfile
+	data, err := os.ReadFile(f.root + key)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func (f *FsStorage) Set(ctx context.Context, key string, data []byte) error {
+	return os.WriteFile(f.root+key, data, 0644)
+}
+
+func (f *FsStorage) Exists(ctx context.Context, key string) (bool, error) {
+	_, err := os.Stat(f.root + key)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
 		return false, err

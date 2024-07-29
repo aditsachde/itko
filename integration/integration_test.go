@@ -15,6 +15,17 @@ import (
 	"itko.dev/internal/ctsubmit"
 )
 
+var partialConfig ctsubmit.GlobalConfig = ctsubmit.GlobalConfig{
+	KeyPath:       "./testdata/ct-http-server.privkey.plaintext.pem",
+	LogID:         "lrviNpCI/wLGL5VTfK25b8cOdbP0YA7tGoQak5jST9o=",
+	ListenAddress: "localhost:3030",
+	MaskSize:      5,
+
+	NotAfterStart: "2020-01-01T00:00:00Z",
+	NotAfterLimit: "2030-01-01T00:00:00Z",
+	FlushMs:       50,
+}
+
 func TestCTIntegration(t *testing.T) {
 	// pprof endpoint
 	go func() {
@@ -24,7 +35,7 @@ func TestCTIntegration(t *testing.T) {
 	startSignal := make(chan struct{})
 	configChan := make(chan ctsubmit.GlobalConfig)
 
-	go setup(startSignal, configChan)
+	go setup(partialConfig, startSignal, configChan)
 	c := <-configChan
 	var config configpb.LogConfig
 
@@ -67,7 +78,7 @@ func TestCTHammer(t *testing.T) {
 	startSignal := make(chan struct{})
 	configChan := make(chan ctsubmit.GlobalConfig)
 
-	go setup(startSignal, configChan)
+	go setup(partialConfig, startSignal, configChan)
 	c := <-configChan
 	var config configpb.LogConfig
 

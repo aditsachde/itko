@@ -20,9 +20,16 @@ import (
 )
 
 // TODO: Evaluate if the context is actually needed
-func Start(ctx context.Context, tileStoreUrl string, maskSize int) (http.Handler, error) {
-	storage := &UrlStorage{urlPrefix: tileStoreUrl}
-	f := newFetch(storage, maskSize)
+func Start(ctx context.Context, tileStoreDir string, tileStoreUrl string, maskSize int) (http.Handler, error) {
+	var f Fetch
+
+	if tileStoreDir != "" {
+		storage := &FsStorage{root: tileStoreDir}
+		f = newFetch(storage, maskSize)
+	} else {
+		storage := &UrlStorage{urlPrefix: tileStoreUrl}
+		f = newFetch(storage, maskSize)
+	}
 
 	// Wrap the HTTP handler function with OTel instrumentation
 	wGetSth := otelhttp.NewHandler(http.HandlerFunc(wrapper(f.get_sth)), "get-sth")

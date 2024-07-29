@@ -28,6 +28,10 @@ type GlobalConfig struct {
 	ListenAddress string `json:"listenAddress"`
 	MaskSize      int    `json:"maskSize"`
 
+	// If this is set, the log will write to the filesystem instead of S3
+	// This value is prefered over the S3 values
+	RootDirectory string `json:"rootDirectory"`
+
 	S3Bucket                   string `json:"s3Bucket"`
 	S3Region                   string `json:"s3Region"`
 	S3EndpointUrl              string `json:"s3EndpointUrl"`
@@ -201,8 +205,18 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 
 	stageOneCommChan := make(chan UnsequencedEntryWithReturnPath, 200)
 	stageTwoCommChan := make(chan []LogEntryWithReturnPath, 2)
-	s3Storage := NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
-	bucket := Bucket{S: &s3Storage}
+
+	var bucket Bucket
+
+	if gc.RootDirectory != "" {
+		log.Println("Using filesystem storage")
+		fsStorage := NewFsStorage(gc.RootDirectory)
+		bucket = Bucket{S: &fsStorage}
+	} else {
+		log.Println("Using S3 storage")
+		s3Storage := NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+		bucket = Bucket{S: &s3Storage}
+	}
 
 	// Get the latest STH
 	var sth ct.SignedTreeHead

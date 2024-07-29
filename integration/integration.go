@@ -18,7 +18,7 @@ import (
 	"itko.dev/internal/ctsubmit"
 )
 
-func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig) {
+func setup(partialConfig ctsubmit.GlobalConfig, startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig) {
 	ctx := context.Background()
 
 	// Testcontainers is nice, but consul and minio run nativily on macos.
@@ -29,28 +29,25 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 	consulEndpoint, consulCleanup := consulSetup(ctx)
 	defer consulCleanup()
 
-	minioEndpoint, minioUsername, minioPassword, minioBucket, minioRegion, minioCleanup := minioSetup(ctx)
-	defer minioCleanup()
-
-	// Upload config to Consul
 	logName := "testlog"
+	config := partialConfig
+	config.Name = logName
 
-	config := ctsubmit.GlobalConfig{
-		Name:          logName,
-		KeyPath:       "./testdata/ct-http-server.privkey.plaintext.pem",
-		LogID:         "lrviNpCI/wLGL5VTfK25b8cOdbP0YA7tGoQak5jST9o=",
-		ListenAddress: "localhost:3030",
-		MaskSize:      5,
+	var ctmonitortileurl string
+	ctmonitortiledir := config.RootDirectory
+	ctmonitormasksize := config.MaskSize
 
-		S3Bucket:                   minioBucket,
-		S3Region:                   minioRegion,
-		S3EndpointUrl:              minioEndpoint,
-		S3StaticCredentialUserName: minioUsername,
-		S3StaticCredentialPassword: minioPassword,
+	if config.RootDirectory == "" {
+		minioEndpoint, minioUsername, minioPassword, minioBucket, minioRegion, minioCleanup := minioSetup(ctx)
+		defer minioCleanup()
 
-		NotAfterStart: "2020-01-01T00:00:00Z",
-		NotAfterLimit: "2030-01-01T00:00:00Z",
-		FlushMs:       50,
+		config.S3Bucket = minioBucket
+		config.S3Region = minioRegion
+		config.S3EndpointUrl = minioEndpoint
+		config.S3StaticCredentialUserName = minioUsername
+		config.S3StaticCredentialPassword = minioPassword
+
+		ctmonitortileurl = minioEndpoint + "/" + minioBucket + "/"
 	}
 
 	ctsetup.MainMain(ctx, consulEndpoint, logName, "./testdata/fake-ca.cert", "./testdata/ct-http-server.privkey.plaintext.pem", config)
@@ -67,11 +64,8 @@ func setup(startSignal chan<- struct{}, configChan chan<- ctsubmit.GlobalConfig)
 		log.Fatalf("failed to create listener: %s", err)
 	}
 
-	ctmonitortileurl := minioEndpoint + "/" + minioBucket + "/"
-	ctmonitormasksize := config.MaskSize
-
 	go ctsubmit.MainMain(ctx, submitListener, logName, consulEndpoint, startSignal)
-	go ctmonitor.MainMain(monitorListener, ctmonitortileurl, ctmonitormasksize, startSignal)
+	go ctmonitor.MainMain(monitorListener, ctmonitortiledir, ctmonitortileurl, ctmonitormasksize, startSignal)
 	proxy(config.ListenAddress, monitorListener.Addr().String(), submitListener.Addr().String())
 }
 

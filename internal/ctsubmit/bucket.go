@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/google/certificate-transparency-go/x509"
@@ -105,8 +106,9 @@ func (b *Bucket) PutRecordHashes(ctx context.Context, hashes []RecordHashUpload,
 		var err error
 		f[e.hashPath], err = b.S.Get(ctx, "int/hashes/"+e.hashPath)
 		if err != nil {
+			// TODO: move this logic into the storage interface
 			var notFound *s3types.NoSuchKey
-			if errors.As(err, &notFound) {
+			if errors.As(err, &notFound) || errors.Is(err, os.ErrNotExist) {
 				// If the file is not found, create a new one.
 				f[e.hashPath] = make([]byte, 0)
 			} else {
@@ -245,8 +247,9 @@ func (b *Bucket) PutDedupeEntries(ctx context.Context, hashes []DedupeUpload, ma
 		var err error
 		f[e.hashPath], err = b.S.Get(ctx, "int/dedupe/"+e.hashPath)
 		if err != nil {
+			// TODO: move this logic into the storage interface
 			var notFound *s3types.NoSuchKey
-			if errors.As(err, &notFound) {
+			if errors.As(err, &notFound) || errors.Is(err, os.ErrNotExist) {
 				// If the file is not found, create a new one.
 				f[e.hashPath] = make([]byte, 0)
 			} else {
