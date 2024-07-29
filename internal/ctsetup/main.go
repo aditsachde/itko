@@ -78,8 +78,15 @@ func uploadRoots(ctx context.Context, rootCerts string, gc ctsubmit.GlobalConfig
 		return err
 	}
 
-	bucket := ctsubmit.NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
-	return bucket.Set(ctx, "/ct/v1/get-roots", rootBytes)
+	var storage ctsubmit.Storage
+	if gc.RootDirectory != "" {
+		s := ctsubmit.NewFsStorage(gc.RootDirectory)
+		storage = &s
+	} else {
+		s := ctsubmit.NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+		storage = &s
+	}
+	return storage.Set(ctx, "ct/v1/get-roots", rootBytes)
 
 }
 
@@ -105,6 +112,13 @@ func uploadEmptySth(ctx context.Context, signingKey string, gc ctsubmit.GlobalCo
 		return err
 	}
 
-	bucket := ctsubmit.NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
-	return bucket.Set(ctx, "/ct/v1/get-sth", jsonBytes)
+	var storage ctsubmit.Storage
+	if gc.RootDirectory != "" {
+		s := ctsubmit.NewFsStorage(gc.RootDirectory)
+		storage = &s
+	} else {
+		s := ctsubmit.NewS3Storage(gc.S3Region, gc.S3Bucket, gc.S3EndpointUrl, gc.S3StaticCredentialUserName, gc.S3StaticCredentialPassword)
+		storage = &s
+	}
+	return storage.Set(ctx, "ct/v1/get-sth", jsonBytes)
 }

@@ -48,8 +48,10 @@ type FsStorage struct {
 }
 
 func (f *FsStorage) Get(ctx context.Context, key string) (data []byte, notfounderr bool, err error) {
+	filePath := f.root + "/" + key
+
 	// try and read the file using os.Readfile
-	data, err = os.ReadFile(f.root + key)
+	data, err = os.ReadFile(filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, true, err

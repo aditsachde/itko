@@ -247,7 +247,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 		var res struct {
 			Certificates [][]byte `json:"certificates"`
 		}
-		roots, err := bucket.S.Get(ctx, "/ct/v1/get-roots")
+		roots, err := bucket.S.Get(ctx, "ct/v1/get-roots")
 		if err != nil {
 			return nil, fmt.Errorf("unable to fetch roots: %v", err)
 		}

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
@@ -98,8 +100,10 @@ func NewFsStorage(rootDirectory string) FsStorage {
 }
 
 func (f *FsStorage) Get(ctx context.Context, key string) ([]byte, error) {
+	filePath := f.root + "/" + key
+
 	// try and read the file using os.Readfile
-	data, err := os.ReadFile(f.root + key)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -107,11 +111,38 @@ func (f *FsStorage) Get(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (f *FsStorage) Set(ctx context.Context, key string, data []byte) error {
-	return os.WriteFile(f.root+key, data, 0644)
+	filePath := f.root + "/" + key
+
+	// Attempt to write the file
+	err := os.WriteFile(filePath, data, 0644)
+	if err == nil {
+		// No error, file written successfully
+		return nil
+	}
+
+	// Check if the error is related to missing directories
+	if os.IsNotExist(err) {
+		// Extract the directory path from the file path
+		dir := filepath.Dir(filePath)
+
+		// Create the directory and any necessary parent directories
+		mkdirErr := os.MkdirAll(dir, 0755)
+		if mkdirErr != nil {
+			return fmt.Errorf("failed to create directories: %w", mkdirErr)
+		}
+
+		// Retry writing the file after creating directories
+		return os.WriteFile(filePath, data, 0644)
+	}
+
+	// Return the original error if it's not related to missing directories
+	return err
 }
 
 func (f *FsStorage) Exists(ctx context.Context, key string) (bool, error) {
-	_, err := os.Stat(f.root + key)
+	filePath := f.root + "/" + key
+
+	_, err := os.Stat(filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
