@@ -16,7 +16,9 @@ This log is operated on a best effort basis, but it is being monitored and shoul
 | End exclusive   | `2026-01-01T00:00:00Z`                                     |
 | Origin          | `ct2025.itko.dev`                                          |
 | Accepted roots  | Same as Google Argon 2025h1                                |
-| MMD             | 0                                                          |
+| MMD             | 0\*                                                        |
+
+\*The actual MMD is always zero, but caching may be introduced in the future which may result in the observed MMD being a nonzero value. It's probably best to configure the MMD as 24h.
 
 ## Motivation
 
