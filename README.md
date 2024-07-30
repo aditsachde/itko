@@ -6,14 +6,15 @@ Ikto is a new CT log that conforms to both the [Static CT](https://c2sp.org/stat
 
 An operating instance using this log implementation can be found at `https://ct2025.itko.dev`.
 
-| Config | Value |
-| -- | -- |
-| Log ID | `o6U+hSdTxD0uzfNlqqAKPwLqLggaBqzejSxyrPxX18E=` |
-| Public Key | [`ct2025.itko.dev.public.der`](ct2025.itko.dev.public.der) |
-| Start inclusive | `2025-01-01T00:00:00Z` |
-| End exclusive | `2026-01-01T00:00:00Z` |
-| Origin | `ct2025.itko.dev` |
-| Accepted roots | Same as Google Argon 2025h1 |
+| Config          | Value                                                      |
+| --------------- | ---------------------------------------------------------- |
+| Log ID          | `o6U+hSdTxD0uzfNlqqAKPwLqLggaBqzejSxyrPxX18E=`             |
+| Public Key      | [`ct2025.itko.dev.public.der`](ct2025.itko.dev.public.der) |
+| Start inclusive | `2025-01-01T00:00:00Z`                                     |
+| End exclusive   | `2026-01-01T00:00:00Z`                                     |
+| Origin          | `ct2025.itko.dev`                                          |
+| Accepted roots  | Same as Google Argon 2025h1                                |
+| MMD             | 0                                                          |
 
 ## Motivation
 
