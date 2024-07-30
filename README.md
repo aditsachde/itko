@@ -6,6 +6,8 @@ Ikto is a new CT log that conforms to both the [Static CT](https://c2sp.org/stat
 
 An operating instance using this log implementation can be found at `https://ct2025.itko.dev`.
 
+This log is operated on a best effort basis, but it is being monitored and should be pretty reliable.
+
 | Config          | Value                                                      |
 | --------------- | ---------------------------------------------------------- |
 | Log ID          | `o6U+hSdTxD0uzfNlqqAKPwLqLggaBqzejSxyrPxX18E=`             |
