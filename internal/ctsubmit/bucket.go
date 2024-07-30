@@ -30,6 +30,10 @@ func (b *Bucket) SetSth(ctx context.Context, data []byte) error {
 	return b.S.Set(ctx, "ct/v1/get-sth", data)
 }
 
+func (b *Bucket) SetCheckpoint(ctx context.Context, data []byte) error {
+	return b.S.Set(ctx, "checkpoint", data)
+}
+
 func (b *Bucket) SetIssuer(ctx context.Context, cert *x509.Certificate) error {
 	fingerprint := sha256.Sum256(cert.Raw)
 	exists, err := b.S.Exists(ctx, fmt.Sprintf("issuer/%x", fingerprint))

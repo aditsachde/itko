@@ -395,6 +395,17 @@ func (d *stageTwoData) stageTwo(
 				return fmt.Errorf("failed to upload new STH: %w", err)
 			}
 
+			// we also upload a checkpoint based on the STH
+			checkpointBytes, err := sunlight.SignTreeHeadCheckpoint(d.checkpointOrigin, d.signingKey, int64(newTreeSize), time.Now().UnixMilli(), rootHash)
+			if err != nil {
+				return fmt.Errorf("failed to generate a new checkpoint: %w", err)
+			}
+
+			err = d.bucket.SetCheckpoint(ctx, checkpointBytes)
+			if err != nil {
+				return fmt.Errorf("failed to upload new checkpoint: %w", err)
+			}
+
 			// ** Upload the dedupe mappings **
 			// TODO: This isn't the best cache key, because it fails to distinguish between
 			// a certificate that is submitted with a different chain. This is a problem because

@@ -91,9 +91,10 @@ type stageOneData struct {
 type stageTwoData struct {
 	stageTwoRx <-chan []LogEntryWithReturnPath
 
-	bucket    Bucket
-	edgeTiles map[int]tileWithBytes
-	maskSize  int
+	bucket           Bucket
+	edgeTiles        map[int]tileWithBytes
+	maskSize         int
+	checkpointOrigin string
 
 	signingKey *ecdsa.PrivateKey
 }
@@ -365,9 +366,10 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 		stageTwo = stageTwoData{
 			stageTwoRx: stageTwoCommChan,
 
-			bucket:    bucket,
-			edgeTiles: edgeTiles,
-			maskSize:  gc.MaskSize,
+			bucket:           bucket,
+			edgeTiles:        edgeTiles,
+			maskSize:         gc.MaskSize,
+			checkpointOrigin: gc.Name,
 
 			signingKey: key,
 		}
