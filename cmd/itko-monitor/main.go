@@ -18,8 +18,8 @@ func main() {
 	maskSize := flag.Int("mask-size", 0, "Mask size for the quadtree.")
 	flag.Parse()
 
-	if *storeDirectory == "" || *storeAddress == "" {
-		fmt.Println("Error: -store-address or -store-address flag must be set")
+	if *storeDirectory == "" && *storeAddress == "" {
+		fmt.Println("Error: -store-directory or -store-address flag must be set")
 		flag.Usage() // Print the usage message
 		os.Exit(1)   // Exit with a non-zero status
 	}
