@@ -45,7 +45,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	ctsubmit.MainMain(ctx, listener, *kvpath, "localhost:8500", nil)
+	ctsubmit.MainMain(ctx, listener, *kvpath, "127.0.0.1:8500", nil)
 }
 
 func configureOtel() func() {
