@@ -13,6 +13,7 @@ An operating instance using this log implementation can be found at `https://ct2
 | Start inclusive | `2025-01-01T00:00:00Z` |
 | End exclusive | `2026-01-01T00:00:00Z` |
 | Origin | `ct2025.itko.dev` |
+| Accepted roots | Same as Google Argon 2025h1 |
 
 ## Motivation
 
