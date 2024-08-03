@@ -169,10 +169,11 @@ func ReadTileLeaf(tile []byte) (e *LogEntry, rest []byte, err error) {
 	}
 
 	// look at first byte to determine the length of the chain
-	var fingerprintCount uint16
-	if !s.ReadUint16(&fingerprintCount) {
+	var fingerprintBytes uint16
+	if !s.ReadUint16(&fingerprintBytes) {
 		return nil, s, fmt.Errorf("invalid data tile precert_entry")
 	}
+	var fingerprintCount = fingerprintBytes / 32
 	// then, try to read out that many fingerprints
 	e.ChainFp = make([][32]byte, 0, fingerprintCount)
 	for i := uint16(0); i < fingerprintCount; i++ {
@@ -217,7 +218,8 @@ func AppendTileLeaf(t []byte, e *LogEntry) []byte {
 			b.AddBytes(e.PreCertificate)
 		})
 	}
-	b.AddUint16(uint16(len(e.ChainFp)))
+	// A Fingerprint is always 32 bytes and the length is the total number of bytes
+	b.AddUint16(uint16(len(e.ChainFp) * 32))
 	for _, fingerprint := range e.ChainFp {
 		b.AddBytes(fingerprint[:])
 	}
