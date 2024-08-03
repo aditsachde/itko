@@ -353,7 +353,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 			// the data tile is the same as the level zero tile, with L -1
 			dataTile.Tile.L = -1
 
-			dataTileBytes, err := bucket.S.Get(ctx, dataTile.Path())
+			dataTileBytes, err := bucket.S.Get(ctx, sunlight.Path(dataTile.Tile))
 			if err != nil {
 				return nil, fmt.Errorf("unable to fetch data tile: %v", err)
 			}

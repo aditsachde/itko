@@ -27,7 +27,7 @@ func (r *TileReader) Height() int {
 
 func (r *TileReader) ReadTiles(tiles []tlog.Tile) (data [][]byte, err error) {
 	for _, t := range tiles {
-		b, err := r.Fetch(t.Path())
+		b, err := r.Fetch(Path(t))
 		if err != nil {
 			return nil, err
 		}

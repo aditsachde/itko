@@ -23,7 +23,7 @@ type Bucket struct {
 // --------------------------------------------------------------------------------------------
 
 func (b *Bucket) SetTile(ctx context.Context, tile tlog.Tile, data []byte) error {
-	return b.S.Set(ctx, tile.Path(), data)
+	return b.S.Set(ctx, sunlight.Path(tile), data)
 }
 
 func (b *Bucket) SetSth(ctx context.Context, data []byte) error {

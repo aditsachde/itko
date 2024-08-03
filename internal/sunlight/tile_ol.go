@@ -16,10 +16,12 @@ package sunlight
 
 import (
 	"fmt"
-	"github.com/google/certificate-transparency-go/x509"
 	"math"
 
+	"github.com/google/certificate-transparency-go/x509"
+
 	"golang.org/x/crypto/cryptobyte"
+	"golang.org/x/mod/sumdb/tlog"
 )
 
 const TileHeight = 8
@@ -232,4 +234,33 @@ func addExtensions(b *cryptobyte.Builder, leafIndex uint64) {
 		}
 		b.AddBytes(ext)
 	})
+}
+
+// To limit the size of any particular directory listing,
+// we encode the (possibly very large) number N
+// by encoding three digits at a time.
+// For example, 123456789 encodes as x123/x456/789.
+// Each directory has at most 1000 each xNNN, NNN, and NNN.p children,
+// so there are at most 3000 entries in any one directory.
+const pathBase = 1000
+
+// Path returns a tile coordinate path describing t.
+func Path(t tlog.Tile) string {
+	n := t.N
+	nStr := fmt.Sprintf("%03d", n%pathBase)
+	for n >= pathBase {
+		n /= pathBase
+		nStr = fmt.Sprintf("x%03d/%s", n%pathBase, nStr)
+	}
+	pStr := ""
+	if t.W != 1<<uint(t.H) {
+		pStr = fmt.Sprintf(".p/%d", t.W)
+	}
+	var L string
+	if t.L == -1 {
+		L = "data"
+	} else {
+		L = fmt.Sprintf("%d", t.L)
+	}
+	return fmt.Sprintf("tile/%s/%s%s", L, nStr, pStr)
 }

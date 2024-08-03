@@ -89,7 +89,7 @@ func hashreader(ctx context.Context, f Fetch, fallbackTreeSize int64) tlog.HashR
 			// and then fall back to the width actually specified in the tile.
 			data, err := f.getTile(ctx, tile)
 			if err != nil {
-				return nil, fmt.Errorf("failed to fetch tile %s: %w (fallback %s)", tile.Path(), err, finalTile.Path())
+				return nil, fmt.Errorf("failed to fetch tile %s: %w (fallback %s)", sunlight.Path(tile), err, sunlight.Path(finalTile))
 			}
 			hash, err := tlog.HashFromTile(tile, data, index)
 			if err != nil {

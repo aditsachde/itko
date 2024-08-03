@@ -45,12 +45,12 @@ func (f *Fetch) getSth(ctx context.Context) (ct.SignedTreeHead, error) {
 func (f *Fetch) getTile(ctx context.Context, tile tlog.Tile) ([]byte, error) {
 	fallbackWidth := tile.W
 	tile.W = sunlight.TileWidth
-	resp, notfound, err := f.s.Get(ctx, tile.Path())
+	resp, notfound, err := f.s.Get(ctx, sunlight.Path(tile))
 	// In case the tile is not found, try to fetch the partial tile
-	if notfound == true {
+	if notfound {
 		if fallbackWidth != sunlight.TileWidth {
 			tile.W = fallbackWidth
-			return f.get(ctx, tile.Path())
+			return f.get(ctx, sunlight.Path(tile))
 		}
 	}
 	return resp, err
