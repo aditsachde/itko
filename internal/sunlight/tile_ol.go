@@ -15,6 +15,7 @@
 package sunlight
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"math"
 
@@ -183,7 +184,11 @@ func ReadTileLeaf(tile []byte) (e *LogEntry, rest []byte, err error) {
 		}
 		e.ChainFp = append(e.ChainFp, fingerprint)
 	}
-	e.CertificateFp = e.ChainFp[0]
+	if e.IsPrecert {
+		e.CertificateFp = sha256.Sum256(e.PreCertificate)
+	} else {
+		e.CertificateFp = sha256.Sum256(e.Certificate)
+	}
 
 	var extensionType uint8
 	var extensionData cryptobyte.String
