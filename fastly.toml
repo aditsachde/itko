@@ -1,0 +1,8 @@
+manifest_version = 3
+name = "ct2025-monitoring"
+language = "go"
+service_id = "X7QzVa4t0wXcAvoOMoXzA5"
+
+[scripts]
+env_vars = ["GOARCH=wasm", "GOOS=wasip1"]
+build = "go build -o bin/main.wasm ./cmd/fastly-monitor"

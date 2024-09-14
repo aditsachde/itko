@@ -30,3 +30,8 @@ go.work
 rfc.pdf
 
 /alphalog
+
+frontend/
+stuff_test.go
+devcontainer.json
+dependabot.yml
