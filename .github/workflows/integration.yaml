@@ -1,6 +1,9 @@
 name: Integration Test
 
-on: [push]
+on:
+  push:
+    branches:
+      - main
 
 jobs:
   integration:
@@ -25,6 +28,8 @@ jobs:
   build:
     needs: integration
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,21 +60,21 @@ jobs:
           # Set Git user name and email for the commits made by this workflow
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          
+
           # Create a new orphan branch named 'builds' with no prior history
           git checkout --orphan builds
-          
+
           # Remove all existing files in the working directory
           git rm -rf .
-          
+
           # Reset to a clean state with no files in the working directory
           git reset --hard
-          
+
           # Add the contents of the 'bin' directory to the staging area
           git add bin/
-          
+
           # Commit the build with a message including the short SHA hash
           git commit -m "Build binaries - SHA: $SHORT_SHA"
-          
+
           # Force push the 'builds' branch to the remote repository
           git push origin +builds
