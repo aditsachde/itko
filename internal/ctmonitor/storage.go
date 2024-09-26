@@ -10,6 +10,7 @@ import (
 
 type Storage interface {
 	Get(ctx context.Context, key string) (data []byte, found bool, err error)
+	AvailableReqs() int
 }
 
 // ------------------------------------------------------------
@@ -41,6 +42,10 @@ func (f *UrlStorage) Get(ctx context.Context, key string) (data []byte, notfound
 	return body, false, nil
 }
 
+func (f *UrlStorage) AvailableReqs() int {
+	return 1
+}
+
 // ------------------------------------------------------------
 
 type FsStorage struct {
@@ -59,4 +64,8 @@ func (f *FsStorage) Get(ctx context.Context, key string) (data []byte, notfounde
 		return nil, false, err
 	}
 	return data, false, nil
+}
+
+func (f *FsStorage) AvailableReqs() int {
+	return 1
 }

@@ -281,9 +281,9 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 		return nil, 400, fmt.Errorf("start and end must be positive")
 	}
 
-	// Limit the number of entries fetched at once to 1000
-	if end-start > 1000 {
-		end = start + 1000
+	// Limit the number of entries fetched at once to 150
+	if end-start > 150 {
+		end = start + 150
 	}
 
 	sth, err := f.getSth(ctx)
@@ -375,12 +375,17 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 
 	ctLeafEntries := make([]ct.LeafEntry, 0, len(entries))
 
+outerloop:
 	for _, entry := range entries {
 		merkleTreeLeaf := entry.MerkleTreeLeaf()
 
 		// TODO: add a cache here
 		chain := make([]ct.ASN1Cert, 0, len(entry.ChainFp))
 		for _, fp := range entry.ChainFp {
+			if f.s.AvailableReqs() == 0 {
+				break outerloop
+			}
+
 			data, err := f.get(ctx, fmt.Sprintf("issuer/%x", fp))
 			if err != nil {
 				return nil, 518, err
