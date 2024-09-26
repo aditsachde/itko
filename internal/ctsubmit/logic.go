@@ -306,6 +306,17 @@ func (d *stageTwoData) stageTwo(
 
 			// This is the right most data tile
 			dataTile := d.edgeTiles[-1]
+			if dataTile.Tile.W > sunlight.TileWidth {
+				return fmt.Errorf("tile width is greater than the maximum width!! %d", dataTile.Tile.W)
+			} else if dataTile.Tile.W == sunlight.TileWidth {
+				// If the tile is full, reset it so we have a partial
+				// Reset the width to zero
+				dataTile.Tile.W = 0
+				// Increment the tile index
+				dataTile.Tile.N++
+				// Clear the bytes
+				dataTile.Bytes = []byte{}
+			}
 
 			for _, e := range pool {
 				recordHash := tlog.RecordHash(e.entry.MerkleTreeLeaf())
@@ -327,7 +338,9 @@ func (d *stageTwoData) stageTwo(
 				dataTile.Tile.W++
 
 				// This means we have a full width tile that we can go ahead and upload
-				if dataTile.Tile.W == sunlight.TileWidth {
+				if dataTile.Tile.W > sunlight.TileWidth {
+					return fmt.Errorf("tile width is greater than the maximum width!!! %d", dataTile.Tile.W)
+				} else if dataTile.Tile.W == sunlight.TileWidth {
 					// Upload the tile
 					t := dataTile
 					g.Go(func() error { return d.bucket.SetTile(gctx, t.Tile, t.Bytes) })
