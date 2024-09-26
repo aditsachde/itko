@@ -1,6 +1,7 @@
 package ctmonitor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,7 +9,10 @@ import (
 	"log"
 	"math/rand"
 	"net/url"
+	"os"
+	"time"
 
+	"github.com/fastly/compute-sdk-go/cache/simple"
 	"github.com/fastly/compute-sdk-go/configstore"
 	"github.com/fastly/compute-sdk-go/fsthttp"
 )
@@ -17,6 +21,7 @@ import (
 // These can be fetched from edge config but for now we will hard code them.
 const configStoreName = "hostmap"
 const maskSize = 5
+const requestLimit = 10
 
 func FastlyServe(ctx context.Context, w fsthttp.ResponseWriter, r *fsthttp.Request) {
 	if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" || r.Method == "DELETE" {
@@ -28,18 +33,22 @@ func FastlyServe(ctx context.Context, w fsthttp.ResponseWriter, r *fsthttp.Reque
 	config, err := configstore.Open(configStoreName)
 	if err != nil {
 		w.WriteHeader(fsthttp.StatusInternalServerError)
-		log.Println("Error opening config store: %v\n", err)
+		log.Printf("Error opening config store: %v\n", err)
 		return
 	}
 
 	backend, err := config.Get(r.Host)
 	if err != nil {
 		w.WriteHeader(fsthttp.StatusNotFound)
-		fmt.Fprintln(w, "Not found")
+		fmt.Fprintln(w, "Backend not found!!!")
 		return
 	}
 
-	s := &FastlyStorage{backend}
+	s := &FastlyStorage{
+		backend:  backend,
+		cache:    make(map[string][]byte),
+		requests: 0,
+	}
 	f := newFetch(s, maskSize)
 
 	if r.URL.Path == "/ct/v1/get-sth-consistency" {
@@ -50,31 +59,10 @@ func FastlyServe(ctx context.Context, w fsthttp.ResponseWriter, r *fsthttp.Reque
 		FastlyWrapper(f.get_entries)(ctx, w, r)
 	} else if r.URL.Path == "/ct/v1/get-entry-and-proof" {
 		FastlyWrapper(f.get_entry_and_proof)(ctx, w, r)
-	} else if r.URL.Path == "/" {
-		w.WriteHeader(fsthttp.StatusOK)
-		fmt.Fprintln(w, "OK\nhttps://github.com/aditsachde/itko?tab=readme-ov-file#public-instance")
 	} else {
-		path := r.URL.Path
-		if len(path) > 0 && path[0] == '/' {
-			path = path[1:]
-		}
-
-		data, notfound, err := s.Get(ctx, r.URL.Path)
-
-		if notfound {
-			w.WriteHeader(fsthttp.StatusNotFound)
-			fmt.Fprintln(w, "Not found")
-			return
-		}
-		if err != nil {
-			w.WriteHeader(fsthttp.StatusInternalServerError)
-			fmt.Fprintln(w, "Error fetching data")
-			return
-		}
-
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Write(data)
+		w.WriteHeader(fsthttp.StatusNotFound)
+		fmt.Fprintln(w, "Not found!!!")
+		return
 	}
 }
 
@@ -104,30 +92,88 @@ func FastlyWrapper(wrapped func(ctx context.Context, reqBody io.ReadCloser, quer
 }
 
 type FastlyStorage struct {
-	backend string
+	backend  string
+	cache    map[string][]byte
+	requests int
+}
+
+func (f *FastlyStorage) AvailableReqs() int {
+	return requestLimit - f.requests
 }
 
 func (f *FastlyStorage) Get(ctx context.Context, key string) (data []byte, notfounderr bool, err error) {
+	if data, ok := f.cache[key]; ok {
+		return data, false, nil
+	}
+
 	url := fmt.Sprintf("https://%s/%s", f.backend, key)
 
-	req, err := fsthttp.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, false, err
-	}
-	resp, err := req.Send(ctx, f.backend)
-	if err != nil {
-		return nil, false, err
-	}
-	if resp.StatusCode != 200 {
-		if resp.StatusCode == 404 {
-			return nil, true, errors.New(fsthttp.StatusText(resp.StatusCode))
-		} else {
-			return nil, false, errors.New(fsthttp.StatusText(resp.StatusCode))
+	notFound := false
+
+	cacheFunc := func() (simple.CacheEntry, error) {
+		f.requests++
+		fmt.Println("Request count:", f.requests)
+
+		req, err := fsthttp.NewRequest("GET", url, nil)
+		req.CacheOptions = fsthttp.CacheOptions{
+			Pass: true,
 		}
+		if err != nil {
+			return simple.CacheEntry{}, err
+		}
+		resp, err := req.Send(ctx, f.backend)
+		if err != nil {
+			return simple.CacheEntry{}, err
+		}
+		if resp.StatusCode != 200 {
+			if resp.StatusCode == 404 {
+				notFound = true
+				return simple.CacheEntry{}, errors.New(fsthttp.StatusText(resp.StatusCode))
+			} else {
+				return simple.CacheEntry{}, errors.New(fsthttp.StatusText(resp.StatusCode))
+			}
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return simple.CacheEntry{}, err
+		}
+
+		f.cache[key] = body
+
+		return simple.CacheEntry{
+			Body: bytes.NewReader(body),
+			TTL:  time.Hour * 24 * 365,
+		}, nil
 	}
-	body, err := io.ReadAll(resp.Body)
+
+	LOCAL := (os.Getenv("FASTLY_HOSTNAME") == "localhost")
+
+	var reader io.Reader
+
+	if !LOCAL {
+		version := os.Getenv("FASTLY_SERVICE_VERSION")
+		ireader, err := simple.GetOrSet([]byte(version+url), cacheFunc)
+		if err != nil {
+			return nil, false, err
+		}
+		defer ireader.Close()
+		reader = ireader
+	} else {
+		entry, err := cacheFunc()
+		if err != nil {
+			return nil, false, err
+		}
+		reader = entry.Body
+	}
+
+	if notFound {
+		return nil, true, errors.New("not found")
+	}
+
+	body, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, false, err
 	}
+
 	return body, false, nil
 }
