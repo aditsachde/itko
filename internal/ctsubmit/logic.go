@@ -170,7 +170,9 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 		// Otherwise, we need to send it to the sequencer
 
 		// Send the unsequenced entry to the first stage
-		returnPath := make(chan sunlight.LogEntry)
+		// This channel is buffered so it doesn't block if an attempt is made to send
+		// after the timeout fires.
+		returnPath := make(chan sunlight.LogEntry, 1)
 		d.stageOneTx <- UnsequencedEntryWithReturnPath{entry, returnPath}
 
 		// If we recieve something here, that means that the entry has been both sequenced
