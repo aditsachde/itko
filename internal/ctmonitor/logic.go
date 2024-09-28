@@ -282,7 +282,7 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 	}
 
 	// Limit the number of entries fetched at once
-	const limit = 100
+	const limit = 75
 	if end-start > limit {
 		end = start + limit
 	}

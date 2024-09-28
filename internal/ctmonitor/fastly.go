@@ -10,6 +10,8 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fastly/compute-sdk-go/cache/simple"
@@ -46,7 +48,7 @@ func FastlyServe(ctx context.Context, w fsthttp.ResponseWriter, r *fsthttp.Reque
 
 	s := &FastlyStorage{
 		backend:  backend,
-		cache:    make(map[string][]byte),
+		cache:    make(map[string]*CacheEntry),
 		requests: 0,
 	}
 	f := newFetch(s, maskSize)
@@ -78,6 +80,9 @@ func FastlyWrapper(wrapped func(ctx context.Context, reqBody io.ReadCloser, quer
 			} else {
 				fsthttp.Error(w, err.Error(), code)
 			}
+
+			log.Println("Error:", err, "Code:", code, "URL:", r.URL)
+
 			return
 		}
 
@@ -91,8 +96,13 @@ func FastlyWrapper(wrapped func(ctx context.Context, reqBody io.ReadCloser, quer
 
 type FastlyStorage struct {
 	backend  string
-	cache    map[string][]byte
+	cache    map[string]*CacheEntry
 	requests int
+}
+
+type CacheEntry struct {
+	status int
+	body   []byte
 }
 
 func (f *FastlyStorage) AvailableReqs() int {
@@ -101,7 +111,12 @@ func (f *FastlyStorage) AvailableReqs() int {
 
 func (f *FastlyStorage) Get(ctx context.Context, key string) (data []byte, notfounderr bool, err error) {
 	if data, ok := f.cache[key]; ok {
-		return data, false, nil
+		if data.status == 404 {
+			return nil, true, errors.New(fsthttp.StatusText(data.status))
+		} else if data.status != 200 {
+			return nil, false, errors.New(fsthttp.StatusText(data.status))
+		}
+		return data.body, false, nil
 	}
 
 	url := fmt.Sprintf("https://%s/%s", f.backend, key)
@@ -122,24 +137,54 @@ func (f *FastlyStorage) Get(ctx context.Context, key string) (data []byte, notfo
 		if err != nil {
 			return simple.CacheEntry{}, err
 		}
+
 		if resp.StatusCode != 200 {
 			if resp.StatusCode == 404 {
 				notFound = true
-				return simple.CacheEntry{}, errors.New(fsthttp.StatusText(resp.StatusCode))
-			} else {
-				return simple.CacheEntry{}, errors.New(fsthttp.StatusText(resp.StatusCode))
 			}
+
+			f.cache[key] = &CacheEntry{
+				status: resp.StatusCode,
+				body:   nil,
+			}
+			return simple.CacheEntry{}, errors.New(fsthttp.StatusText(resp.StatusCode))
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return simple.CacheEntry{}, err
 		}
 
-		f.cache[key] = body
+		f.cache[key] = &CacheEntry{
+			status: resp.StatusCode,
+			body:   body,
+		}
+
+		// Parse TTL from cache-control header
+		ttl := 43200 // 12 hours in seconds as default
+
+		// This is normalized to lower case
+		cacheControl := resp.Header.Get("cache-control")
+		if cacheControl != "" {
+			directives := strings.Split(cacheControl, ",")
+			for _, directive := range directives {
+				directive = strings.TrimSpace(directive)
+				if strings.HasPrefix(directive, "max-age=") {
+					parsed, err := strconv.Atoi(directive[8:])
+					if err != nil {
+						log.Println("Error parsing max-age directive:", err)
+						break
+					}
+					ttl = parsed
+					break
+				}
+			}
+		} else {
+			log.Println("No cache-control header found")
+		}
 
 		return simple.CacheEntry{
 			Body: bytes.NewReader(body),
-			TTL:  time.Hour * 24 * 365,
+			TTL:  time.Duration(ttl) * time.Second,
 		}, nil
 	}
 
@@ -151,6 +196,9 @@ func (f *FastlyStorage) Get(ctx context.Context, key string) (data []byte, notfo
 		version := os.Getenv("FASTLY_SERVICE_VERSION")
 		ireader, err := simple.GetOrSet([]byte(version+url), cacheFunc)
 		if err != nil {
+			if notFound {
+				return nil, true, err
+			}
 			return nil, false, err
 		}
 		defer ireader.Close()
@@ -161,10 +209,9 @@ func (f *FastlyStorage) Get(ctx context.Context, key string) (data []byte, notfo
 			return nil, false, err
 		}
 		reader = entry.Body
-	}
-
-	if notFound {
-		return nil, true, errors.New("not found")
+		if notFound {
+			return nil, true, errors.New("not found")
+		}
 	}
 
 	body, err := io.ReadAll(reader)

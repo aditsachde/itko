@@ -9,7 +9,7 @@ import (
 )
 
 type Storage interface {
-	Get(ctx context.Context, key string) (data []byte, found bool, err error)
+	Get(ctx context.Context, key string) (data []byte, notfounderr bool, err error)
 	AvailableReqs() int
 }
 
