@@ -68,8 +68,6 @@ func FastlyServe(ctx context.Context, w fsthttp.ResponseWriter, r *fsthttp.Reque
 
 func FastlyWrapper(wrapped func(ctx context.Context, reqBody io.ReadCloser, query url.Values) (resp []byte, code int, err error)) func(c context.Context, w fsthttp.ResponseWriter, r *fsthttp.Request) {
 	return func(c context.Context, w fsthttp.ResponseWriter, r *fsthttp.Request) {
-		log.Println("Path:", r.URL.Path, "Method:", r.Method, "Query:", r.URL.Query())
-
 		query := r.URL.Query()
 		resp, code, err := wrapped(c, r.Body, query)
 
@@ -112,7 +110,6 @@ func (f *FastlyStorage) Get(ctx context.Context, key string) (data []byte, notfo
 
 	cacheFunc := func() (simple.CacheEntry, error) {
 		f.requests++
-		fmt.Println("Request count:", f.requests)
 
 		req, err := fsthttp.NewRequest("GET", url, nil)
 		req.CacheOptions = fsthttp.CacheOptions{
