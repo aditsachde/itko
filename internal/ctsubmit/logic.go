@@ -107,7 +107,13 @@ func (d *stageZeroData) stageZero(ctx context.Context, reqBody io.ReadCloser, pr
 
 	chain, err := ctfe.ValidateChain(req.Chain, validationOpts)
 	if err != nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("unable to validate chain: %w", err)
+		var base64Array []string
+		for _, item := range req.Chain {
+			encoded := base64.StdEncoding.EncodeToString(item)
+			base64Array = append(base64Array, encoded)
+		}
+
+		return nil, http.StatusBadRequest, fmt.Errorf("unable to validate chain: %w. Chain: %+v", err, base64Array)
 	}
 
 	isPrecert, err := ctfe.IsPrecertificate(chain[0])
