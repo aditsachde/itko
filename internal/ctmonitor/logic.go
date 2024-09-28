@@ -281,9 +281,10 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 		return nil, 400, fmt.Errorf("start and end must be positive")
 	}
 
-	// Limit the number of entries fetched at once to 150
-	if end-start > 150 {
-		end = start + 150
+	// Limit the number of entries fetched at once
+	const limit = 100
+	if end-start > limit {
+		end = start + limit
 	}
 
 	sth, err := f.getSth(ctx)
