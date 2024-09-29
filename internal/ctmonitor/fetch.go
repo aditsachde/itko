@@ -13,14 +13,16 @@ import (
 )
 
 type Fetch struct {
-	s        Storage
-	maskSize int
+	s           Storage
+	maskSize    int
+	maxGetEntry int
 }
 
-func newFetch(storage Storage, maskSize int) Fetch {
+func newFetch(storage Storage, maskSize, maxGetEntry int) Fetch {
 	return Fetch{
-		s:        storage,
-		maskSize: maskSize,
+		s:           storage,
+		maskSize:    maskSize,
+		maxGetEntry: maxGetEntry,
 	}
 }
 

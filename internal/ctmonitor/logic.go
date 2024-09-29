@@ -22,13 +22,14 @@ import (
 // TODO: Evaluate if the context is actually needed
 func Start(ctx context.Context, tileStoreDir string, tileStoreUrl string, maskSize int) (http.Handler, error) {
 	var f Fetch
+	maxGetEntry := 1024
 
 	if tileStoreDir != "" {
 		storage := &FsStorage{root: tileStoreDir}
-		f = newFetch(storage, maskSize)
+		f = newFetch(storage, maskSize, maxGetEntry)
 	} else {
 		storage := &UrlStorage{urlPrefix: tileStoreUrl}
-		f = newFetch(storage, maskSize)
+		f = newFetch(storage, maskSize, maxGetEntry)
 	}
 
 	// Wrap the HTTP handler function with OTel instrumentation
@@ -282,7 +283,7 @@ func (f Fetch) get_entries(ctx context.Context, reqBody io.ReadCloser, query url
 	}
 
 	// Limit the number of entries fetched at once
-	const limit = 75
+	limit := int64(f.maxGetEntry)
 	if end-start > limit {
 		end = start + limit
 	}

@@ -51,7 +51,7 @@ func FastlyServe(ctx context.Context, w fsthttp.ResponseWriter, r *fsthttp.Reque
 		cache:    make(map[string]*CacheEntry),
 		requests: 0,
 	}
-	f := newFetch(s, maskSize)
+	f := newFetch(s, maskSize, 75) // Limit get-entries to 75
 
 	if r.URL.Path == "/ct/v1/get-sth-consistency" {
 		FastlyWrapper(f.get_sth_consistency)(ctx, w, r)
