@@ -8,17 +8,20 @@ An operating instance using this log implementation can be found at `https://ct2
 
 This log is operated on a best effort basis, but it is being monitored and should be pretty reliable.
 
-| Config          | Value                                                      |
-| --------------- | ---------------------------------------------------------- |
-| Log ID          | `yLkilxtwEtRI1qd7fACK5qViNNxRkxAzwlUNQjiVeZo=`             |
-| Public Key      | [`ct2025.itko.dev.public.der`](ct2025.itko.dev.public.der) |
-| Start inclusive | `2025-01-01T00:00:00Z`                                     |
-| End exclusive   | `2026-01-01T00:00:00Z`                                     |
-| Origin          | `ct2025.itko.dev`                                          |
-| Accepted roots  | Same as Google Argon 2025h1                                |
-| MMD             | 0\*                                                        |
+| Config          | Value                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------- |
+| Log ID          | `yLkilxtwEtRI1qd7fACK5qViNNxRkxAzwlUNQjiVeZo=`                                         |
+| Public Key      | [`ct2025.itko.dev.public.der`](ct2025.itko.dev.public.der)                             |
+| Start inclusive | `2025-01-01T00:00:00Z`                                                                 |
+| End exclusive   | `2026-01-01T00:00:00Z`                                                                 |
+| Origin          | `ct2025.itko.dev`                                                                      |
+| Accepted roots  | [`ct2025.itko.dev.bundle.pem`](ct2025.itko.dev.bundle.pem) |
+| MMD             | 0\*                                                                                    |
 
-\*The actual MMD is always zero, but caching may be introduced in the future which may result in the observed MMD being a nonzero value. It's probably best to configure the MMD as 24h.
+The accepted roots list is the same as Argon 2025h1, plus a custom monitoring root.
+
+The actual MMD of the log is zero. Caching on the `/checkpoint` and `/ct/v1/get-sth` endpoints can result in delays up to 60 seconds. The `/ct/v1/get-proof-by-hash` endpoint specifically may take up to 23 hours to show new certificates due to caching. It's probably best to configure the MMD as 24h.
+
 
 ## Motivation
 
