@@ -18,7 +18,9 @@ This log is operated on a best effort basis, but it is being monitored and shoul
 | Accepted roots  | [`ct2025.itko.dev.bundle.pem`](ct2025.itko.dev.bundle.pem) |
 | MMD             | 0\*                                                                                    |
 
-The accepted roots list is the same as Argon 2025h1, plus a custom monitoring root.
+The accepted roots list is the same as Argon 2025h1, plus a custom monitoring root and others by request ([#1]).
+
+[#1]: https://github.com/aditsachde/itko/issues/1
 
 The actual MMD of the log is zero. Caching on the `/checkpoint` and `/ct/v1/get-sth` endpoints can result in delays up to 60 seconds. The `/ct/v1/get-proof-by-hash` endpoint specifically may take up to 23 hours to show new certificates due to caching. It's probably best to configure the MMD as 24h.
 
