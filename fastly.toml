@@ -6,3 +6,16 @@ service_id = "X7QzVa4t0wXcAvoOMoXzA5"
 [scripts]
 env_vars = ["GOARCH=wasm", "GOOS=wasip1"]
 build = "go build -o bin/main.wasm ./cmd/fastly-monitor"
+
+[local_server]
+  [local_server.config_stores]
+    [local_server.config_stores.hostmap]
+      format = "inline-toml"
+    [local_server.config_stores.hostmap.contents]
+      "itko-translate-25.edgecompute.app" = "store-ct2025.itko.dev"
+      "127.0.0.1:7676" = "ct2025.itko.dev"
+  [local_server.backends]
+    [local_server.backends."store-ct2025.itko.dev"]
+      url = "https://store-ct2025.itko.dev"
+    [local_server.backends."ct2025.itko.dev"]
+      url = "https://ct2025.itko.dev"

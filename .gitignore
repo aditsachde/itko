@@ -37,3 +37,4 @@ devcontainer.json
 dependabot.yml
 bin/
 pkg/
+fixerupper/
