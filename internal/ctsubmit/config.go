@@ -95,6 +95,7 @@ type stageTwoData struct {
 	edgeTiles        map[int]tileWithBytes
 	maskSize         int
 	checkpointOrigin string
+	treeSize         uint64
 
 	signingKey *ecdsa.PrivateKey
 }
@@ -370,6 +371,7 @@ func LoadLog(ctx context.Context, kvpath, consulAddress string) (*Log, error) {
 			edgeTiles:        edgeTiles,
 			maskSize:         gc.MaskSize,
 			checkpointOrigin: gc.Name,
+			treeSize:         sth.TreeSize,
 
 			signingKey: key,
 		}
